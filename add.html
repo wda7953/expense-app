@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>新增記錄</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #FAF7F2;
+      color: #3A2E24;
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+    .header {
+      background: #7A5C3E;
+      color: white;
+      padding: 16px 20px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header a { color: white; text-decoration: none; font-size: 22px; line-height: 1; }
+    .header h1 { font-size: 18px; font-weight: 600; }
+
+    /* 類型選擇（橫向捲動） */
+    .type-scroll {
+      padding: 14px 16px 8px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .type-scroll::-webkit-scrollbar { display: none; }
+    .type-chip {
+      flex-shrink: 0;
+      padding: 7px 14px;
+      border-radius: 20px;
+      border: 1.5px solid #D4C5B5;
+      background: white;
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .type-chip.active {
+      background: #7A5C3E;
+      border-color: #7A5C3E;
+      color: white;
+    }
+
+    /* 金額輸入 */
+    .amount-wrap {
+      padding: 16px 20px 10px;
+      text-align: center;
+    }
+    .amount-hint { font-size: 12px; color: #bbb; margin-bottom: 6px; }
+    .amount-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .amount-sign { font-size: 28px; font-weight: 700; color: #bbb; }
+    .amount-input {
+      font-size: 44px; font-weight: 700; color: #3A2E24;
+      border: none; background: none;
+      width: 200px; outline: none; text-align: center;
+    }
+    .amount-input::placeholder { color: #ddd; }
+
+    /* 表單 */
+    .form { padding: 0 16px; }
+    .row { margin-bottom: 12px; }
+    .row label { display: block; font-size: 11px; color: #999; margin-bottom: 5px; font-weight: 500; }
+    .row input, .row select {
+      width: 100%; padding: 12px 14px;
+      border: none; border-radius: 12px;
+      background: white; font-size: 15px; color: #3A2E24;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      -webkit-appearance: none; appearance: none;
+    }
+
+    /* 分期特殊欄（並排） */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+
+    /* 分攤欄 */
+    .split-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .split-label { font-size: 11px; color: #999; margin-bottom: 5px; font-weight: 500; }
+
+    /* 分類格狀 */
+    .cat-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px;
+    }
+    .cat-btn {
+      background: white; border: 2px solid transparent;
+      border-radius: 12px; padding: 9px 4px;
+      text-align: center; cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .cat-btn .ci { font-size: 20px; }
+    .cat-btn .cn { font-size: 10px; color: #888; margin-top: 3px; }
+    .cat-btn.sel { border-color: #7A5C3E; background: #FFF8F3; }
+    .cat-btn.sel .cn { color: #7A5C3E; font-weight: 600; }
+
+    /* 支付方式 */
+    .pay-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+    .pay-btn {
+      flex: 1; padding: 10px; border: 1.5px solid #D4C5B5;
+      border-radius: 12px; background: white;
+      font-size: 14px; font-weight: 500; color: #888; cursor: pointer;
+      text-align: center;
+    }
+    .pay-btn.sel { border-color: #7A5C3E; color: #7A5C3E; background: #FFF8F3; }
+
+    /* 儲存按鈕 */
+    .save-btn {
+      display: block; width: 100%; margin-top: 20px;
+      padding: 16px; background: #7A5C3E; color: white;
+      border: none; border-radius: 14px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(122,92,62,0.3);
+    }
+    .save-btn:disabled { opacity: 0.5; }
+
+    .toast {
+      position: fixed; bottom: 40px; left: 50%;
+      transform: translateX(-50%);
+      background: #3A2E24; color: white;
+      padding: 10px 20px; border-radius: 20px;
+      font-size: 14px; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <a href="index.html">‹</a>
+    <h1>新增記錄</h1>
+  </div>
+
+  <!-- 類型選擇 -->
+  <div class="type-scroll" id="typeScroll">
+    <button class="type-chip active" data-type="expense_personal">個人支出</button>
+    <button class="type-chip" data-type="expense_shared">共同支出</button>
+    <button class="type-chip" data-type="expense_family">家庭支出</button>
+    <button class="type-chip" data-type="expense_installment">分期款項</button>
+    <button class="type-chip" data-type="income">收入</button>
+  </div>
+
+  <!-- 金額（分期用每期金額） -->
+  <div class="amount-wrap" id="amountWrap">
+    <div class="amount-hint" id="amountHint">金額（元）</div>
+    <div class="amount-row">
+      <span class="amount-sign">$</span>
+      <input type="number" class="amount-input" id="amount" placeholder="0" inputmode="numeric">
+    </div>
+  </div>
+
+  <div class="form">
+
+    <!-- 日期（所有類型共用） -->
+    <div class="row" id="dateRow">
+      <label>日期</label>
+      <input type="date" id="date">
+    </div>
+
+    <!-- 類別（個人/共同/家庭支出） -->
+    <div class="row hidden" id="categoryRow">
+      <label>分類</label>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+
+    <!-- 支付方式（個人/共同/家庭支出） -->
+    <div class="hidden" id="paymentRow">
+      <div style="font-size:11px;color:#999;margin-bottom:5px;font-weight:500;">支付方式</div>
+      <div class="pay-toggle">
+        <button class="pay-btn sel" data-pay="現金">現金</button>
+        <button class="pay-btn" data-pay="刷卡">刷卡（下個月扣）</button>
+      </div>
+    </div>
+
+    <!-- 分攤（共同/家庭支出） -->
+    <div class="hidden" id="splitRow">
+      <div class="split-row">
+        <div>
+          <div class="split-label">綸出（元）</div>
+          <input type="number" id="olan_amount" placeholder="0" inputmode="numeric"
+            style="width:100%;padding:12px 14px;border:none;border-radius:12px;background:white;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        </div>
+        <div>
+          <div class="split-label">瑋出（元）</div>
+          <input type="number" id="wei_amount" placeholder="0" inputmode="numeric"
+            style="width:100%;padding:12px 14px;border:none;border-radius:12px;background:white;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        </div>
+      </div>
+    </div>
+
+    <!-- 分期專用欄 -->
+    <div class="hidden" id="installmentRows">
+      <div class="row">
+        <label>分期名稱（例：iPhone 17 pro 12期）</label>
+        <input type="text" id="inst_name" placeholder="">
+      </div>
+      <div class="two-col">
+        <div>
+          <div style="font-size:11px;color:#999;margin-bottom:5px;font-weight:500;">第幾期</div>
+          <input type="number" id="current_period" placeholder="1" inputmode="numeric"
+            style="width:100%;padding:12px 14px;border:none;border-radius:12px;background:white;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        </div>
+        <div>
+          <div style="font-size:11px;color:#999;margin-bottom:5px;font-weight:500;">共幾期</div>
+          <input type="number" id="total_periods" placeholder="12" inputmode="numeric"
+            style="width:100%;padding:12px 14px;border:none;border-radius:12px;background:white;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        </div>
+      </div>
+      <div class="row">
+        <label>總金額（選填）</label>
+        <input type="number" id="total_amount" placeholder="0" inputmode="numeric">
+      </div>
+    </div>
+
+    <!-- 收入類型（收入用） -->
+    <div class="row hidden" id="incomeTypeRow">
+      <label>收入類型</label>
+      <select id="income_type">
+        <option value="現金收入">現金收入</option>
+        <option value="預收款">預收款</option>
+        <option value="武士薪水">武士薪水</option>
+      </select>
+    </div>
+
+    <!-- 說明/備註（共用） -->
+    <div class="row">
+      <label id="noteLabel">備註（可略）</label>
+      <input type="text" id="note" placeholder="">
+    </div>
+
+    <button class="save-btn" id="saveBtn" onclick="save()">儲存</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script>
+    const EXPENSE_CATS = [
+      { name: '飲食',     icon: '🍽️' },
+      { name: '交通',     icon: '🚗' },
+      { name: '購物',     icon: '🛍️' },
+      { name: '旅遊',     icon: '✈️' },
+      { name: '運動/活動',icon: '🏃' },
+      { name: '醫療',     icon: '💊' },
+      { name: '器材',     icon: '🏋️' },
+      { name: '其他',     icon: '📌' },
+    ];
+
+    let currentType = 'expense_personal';
+    let selectedCat = EXPENSE_CATS[0].name;
+    let selectedPay = '現金';
+
+    // 初始化日期
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    document.getElementById('date').value = ymd;
+
+    // 類型切換
+    document.querySelectorAll('.type-chip').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.type-chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentType = btn.dataset.type;
+        renderForm();
+      };
+    });
+
+    function renderForm() {
+      const isExpense     = ['expense_personal','expense_shared','expense_family'].includes(currentType);
+      const isShared      = ['expense_shared','expense_family'].includes(currentType);
+      const isInstallment = currentType === 'expense_installment';
+      const isIncome      = currentType === 'income';
+
+      toggle('categoryRow',     isExpense);
+      toggle('paymentRow',      isExpense || isInstallment);
+      toggle('splitRow',        isShared);
+      toggle('installmentRows', isInstallment);
+      toggle('incomeTypeRow',   isIncome);
+
+      document.getElementById('amountHint').textContent =
+        isInstallment ? '每期金額（元）' : '金額（元）';
+      document.getElementById('noteLabel').textContent =
+        isIncome ? '說明（例：鳳琴姐）' : '備註（可略）';
+
+      if (isExpense) renderCats();
+    }
+
+    function toggle(id, show) {
+      document.getElementById(id).classList.toggle('hidden', !show);
+    }
+
+    function renderCats() {
+      document.getElementById('catGrid').innerHTML = EXPENSE_CATS.map(c => `
+        <button class="cat-btn ${c.name === selectedCat ? 'sel' : ''}"
+          onclick="selectCat('${c.name}')">
+          <div class="ci">${c.icon}</div>
+          <div class="cn">${c.name}</div>
+        </button>`).join('');
+    }
+
+    function selectCat(name) {
+      selectedCat = name;
+      renderCats();
+    }
+
+    // 支付方式
+    document.querySelectorAll('.pay-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('sel'));
+        btn.classList.add('sel');
+        selectedPay = btn.dataset.pay;
+      };
+    });
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    async function save() {
+      const amount = parseFloat(document.getElementById('amount').value);
+      if (!amount || amount <= 0) { showToast('請輸入金額'); return; }
+
+      const dateVal = document.getElementById('date').value;
+      if (!dateVal) { showToast('請選擇日期'); return; }
+      const monthVal = dateVal.slice(0, 7).replace('-', '.');
+
+      let payload = { sheet: currentType };
+
+      if (currentType === 'income') {
+        payload.date        = dateVal;
+        payload.description = document.getElementById('note').value.trim();
+        payload.amount      = amount;
+        payload.type        = document.getElementById('income_type').value;
+      } else if (currentType === 'expense_installment') {
+        const name = document.getElementById('inst_name').value.trim();
+        if (!name) { showToast('請輸入分期名稱'); return; }
+        payload.month          = monthVal;
+        payload.date           = dateVal;
+        payload.name           = name;
+        payload.per_amount     = amount;
+        payload.total_amount   = parseFloat(document.getElementById('total_amount').value) || 0;
+        payload.current_period = parseInt(document.getElementById('current_period').value) || 1;
+        payload.total_periods  = parseInt(document.getElementById('total_periods').value) || 0;
+        payload.payment        = selectedPay;
+        payload.note           = document.getElementById('note').value.trim();
+      } else {
+        payload.month    = monthVal;
+        payload.date     = dateVal;
+        payload.category = selectedCat;
+        payload.amount   = amount;
+        payload.payment  = selectedPay;
+        payload.note     = document.getElementById('note').value.trim();
+        if (['expense_shared','expense_family'].includes(currentType)) {
+          payload.olan_amount = parseFloat(document.getElementById('olan_amount').value) || 0;
+          payload.wei_amount  = parseFloat(document.getElementById('wei_amount').value) || 0;
+        }
+      }
+
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true; btn.textContent = '儲存中…';
+
+      try {
+        await API.apiPost('addRecord', payload);
+        showToast('✅ 已儲存！');
+        setTimeout(() => {
+          document.getElementById('amount').value = '';
+          document.getElementById('note').value   = '';
+          if (document.getElementById('olan_amount'))
+            document.getElementById('olan_amount').value = '';
+          if (document.getElementById('wei_amount'))
+            document.getElementById('wei_amount').value  = '';
+          btn.disabled = false; btn.textContent = '儲存';
+        }, 800);
+      } catch (e) {
+        showToast('❌ 儲存失敗');
+        btn.disabled = false; btn.textContent = '儲存';
+      }
+    }
+
+    // 初始畫面
+    renderForm();
+    renderCats();
+  </script>
+</body>
+</html>

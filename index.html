@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>個人記帳</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="記帳">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #FAF7F2;
+      color: #3A2E24;
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    /* 頂部 */
+    .header {
+      background: #7A5C3E;
+      color: white;
+      padding: 16px 20px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .month-nav { display: flex; align-items: center; gap: 12px; }
+    .month-nav button {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .month-label { font-size: 15px; font-weight: 500; min-width: 80px; text-align: center; }
+
+    /* 總覽卡片 */
+    .summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      padding: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .card .label { font-size: 11px; color: #888; margin-bottom: 6px; }
+    .card .amount { font-size: 16px; font-weight: 700; }
+    .card.income .amount { color: #2E7D32; }
+    .card.expense .amount { color: #C62828; }
+    .card.balance .amount { color: #7A5C3E; }
+
+    /* 最近記錄 */
+    .section-title {
+      font-size: 13px;
+      color: #888;
+      padding: 4px 16px 8px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+    .records { padding: 0 16px; }
+    .record-item {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .record-left { display: flex; align-items: center; gap: 12px; }
+    .record-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .record-icon.expense { background: #FFEBEE; }
+    .record-icon.income { background: #E8F5E9; }
+    .record-info .category { font-size: 14px; font-weight: 600; }
+    .record-info .note { font-size: 12px; color: #999; margin-top: 2px; }
+    .record-right { text-align: right; }
+    .record-right .amount { font-size: 15px; font-weight: 700; }
+    .record-right .amount.expense { color: #C62828; }
+    .record-right .amount.income { color: #2E7D32; }
+    .record-right .date { font-size: 11px; color: #bbb; margin-top: 2px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #bbb;
+      font-size: 14px;
+    }
+    .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+
+    /* 底部導航 */
+    .tab-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: white;
+      border-top: 1px solid #E8E0D8;
+      display: flex;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .tab-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      text-decoration: none;
+      color: #bbb;
+      font-size: 10px;
+      gap: 3px;
+    }
+    .tab-item.active { color: #7A5C3E; }
+    .tab-item .icon { font-size: 22px; }
+
+    /* 新增按鈕（中間大按鈕） */
+    .tab-add {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 0;
+      text-decoration: none;
+    }
+    .tab-add .add-btn {
+      width: 48px; height: 48px;
+      background: #7A5C3E;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      color: white;
+      box-shadow: 0 2px 8px rgba(122,92,62,0.4);
+      margin-top: -16px;
+    }
+
+    .loading { text-align: center; padding: 30px; color: #bbb; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>記帳</h1>
+    <div class="month-nav">
+      <button id="prevMonth">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="nextMonth">›</button>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="card income">
+      <div class="label">收入</div>
+      <div class="amount" id="totalIncome">—</div>
+    </div>
+    <div class="card expense">
+      <div class="label">支出</div>
+      <div class="amount" id="totalExpense">—</div>
+    </div>
+    <div class="card balance">
+      <div class="label">結餘</div>
+      <div class="amount" id="balance">—</div>
+    </div>
+  </div>
+
+  <div class="section-title">最近記錄</div>
+  <div class="records" id="recordsList">
+    <div class="loading">載入中…</div>
+  </div>
+
+  <nav class="tab-bar">
+    <a href="index.html" class="tab-item active"><span class="icon">🏠</span><span>總覽</span></a>
+    <a href="add.html" class="tab-add"><div class="add-btn">＋</div></a>
+    <a href="settlement.html" class="tab-item"><span class="icon">🧾</span><span>結算</span></a>
+    <a href="stats.html" class="tab-item"><span class="icon">📊</span><span>統計</span></a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const CATEGORY_ICONS = {
+      '飲食': '🍽️', '交通': '🚗', '購物': '🛍️', '旅遊': '✈️',
+      '運動/活動': '🏃', '醫療': '💊', '器材': '🏋️', '其他': '📌',
+      '現金收入': '💰', '預收款': '📥', '武士薪水': '🥋'
+    };
+
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth() + 1;
+
+    function formatMonth(y, m) {
+      return `${y}年${m}月`;
+    }
+
+    function formatMoney(n) {
+      return '$' + Math.abs(n).toLocaleString();
+    }
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      return `${d.getMonth()+1}/${d.getDate()}`;
+    }
+
+    document.getElementById('prevMonth').onclick = () => {
+      currentMonth--;
+      if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+      loadData();
+    };
+    document.getElementById('nextMonth').onclick = () => {
+      currentMonth++;
+      if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+      loadData();
+    };
+
+    async function loadData() {
+      document.getElementById('monthLabel').textContent = formatMonth(currentYear, currentMonth);
+      document.getElementById('totalIncome').textContent = '—';
+      document.getElementById('totalExpense').textContent = '—';
+      document.getElementById('balance').textContent = '—';
+      document.getElementById('recordsList').innerHTML = '<div class="loading">載入中…</div>';
+
+      try {
+        const data = await API.apiGet('getMonthRecords', {
+          year: currentYear,
+          month: currentMonth
+        });
+
+        const records = data.records || [];
+        let income = 0, expense = 0;
+        records.forEach(r => {
+          if (r.type === 'income') income += Number(r.amount);
+          else expense += Number(r.amount);
+        });
+
+        document.getElementById('totalIncome').textContent = formatMoney(income);
+        document.getElementById('totalExpense').textContent = formatMoney(expense);
+        const bal = income - expense;
+        document.getElementById('balance').textContent = (bal >= 0 ? '+' : '-') + '$' + Math.abs(bal).toLocaleString();
+
+        const list = document.getElementById('recordsList');
+        if (records.length === 0) {
+          list.innerHTML = '<div class="empty-state"><div class="emoji">📭</div>這個月還沒有記錄</div>';
+          return;
+        }
+
+        // 最新的排最前
+        const sorted = [...records].sort((a, b) => new Date(b.date) - new Date(a.date));
+        list.innerHTML = sorted.map(r => `
+          <div class="record-item">
+            <div class="record-left">
+              <div class="record-icon ${r.type}">
+                ${CATEGORY_ICONS[r.category] || '📌'}
+              </div>
+              <div class="record-info">
+                <div class="category">${r.category}</div>
+                ${r.note ? `<div class="note">${r.note}</div>` : ''}
+              </div>
+            </div>
+            <div class="record-right">
+              <div class="amount ${r.type}">${r.type === 'expense' ? '-' : '+'}${formatMoney(r.amount)}</div>
+              <div class="date">${formatDate(r.date)}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('recordsList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗，請確認網路</div>';
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

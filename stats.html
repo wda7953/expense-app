@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>統計</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #FAF7F2;
+      color: #3A2E24;
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    .header {
+      background: #7A5C3E;
+      color: white;
+      padding: 16px 20px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .month-nav { display: flex; align-items: center; gap: 12px; }
+    .month-nav button {
+      background: rgba(255,255,255,0.2);
+      border: none; color: white;
+      width: 32px; height: 32px;
+      border-radius: 50%; font-size: 16px; cursor: pointer;
+    }
+    .month-label { font-size: 15px; font-weight: 500; min-width: 80px; text-align: center; }
+
+    .content { padding: 16px; }
+
+    /* 總計區 */
+    .total-card {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      display: flex;
+      justify-content: space-around;
+    }
+    .total-item { text-align: center; }
+    .total-item .label { font-size: 11px; color: #999; margin-bottom: 6px; }
+    .total-item .val { font-size: 20px; font-weight: 700; }
+    .total-item .val.expense { color: #C62828; }
+    .total-item .val.income { color: #2E7D32; }
+
+    /* 分類列表 */
+    .section-title { font-size: 12px; color: #888; margin-bottom: 10px; font-weight: 600; letter-spacing: 0.5px; }
+    .cat-row {
+      background: white;
+      border-radius: 12px;
+      padding: 13px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .cat-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .cat-row-left { display: flex; align-items: center; gap: 10px; }
+    .cat-icon { font-size: 20px; }
+    .cat-name { font-size: 14px; font-weight: 600; }
+    .cat-amount { font-size: 15px; font-weight: 700; color: #C62828; }
+    .progress-bar {
+      height: 4px;
+      background: #F0EBE5;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #7A5C3E;
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+    .cat-pct { font-size: 11px; color: #bbb; margin-top: 4px; text-align: right; }
+
+    .empty-state {
+      text-align: center; padding: 40px 20px;
+      color: #bbb; font-size: 14px;
+    }
+    .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+
+    .tab-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: white;
+      border-top: 1px solid #E8E0D8;
+      display: flex;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .tab-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; padding: 10px 0;
+      text-decoration: none; color: #bbb;
+      font-size: 10px; gap: 3px;
+    }
+    .tab-item.active { color: #7A5C3E; }
+    .tab-item .icon { font-size: 22px; }
+    .tab-add {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 6px 0; text-decoration: none;
+    }
+    .tab-add .add-btn {
+      width: 48px; height: 48px;
+      background: #7A5C3E; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; color: white;
+      box-shadow: 0 2px 8px rgba(122,92,62,0.4);
+      margin-top: -16px;
+    }
+    .loading { text-align: center; padding: 30px; color: #bbb; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>統計</h1>
+    <div class="month-nav">
+      <button id="prevMonth">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="nextMonth">›</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="total-card">
+      <div class="total-item">
+        <div class="label">支出</div>
+        <div class="val expense" id="totalExpense">—</div>
+      </div>
+      <div class="total-item">
+        <div class="label">收入</div>
+        <div class="val income" id="totalIncome">—</div>
+      </div>
+    </div>
+
+    <div class="section-title">支出分類</div>
+    <div id="catList"><div class="loading">載入中…</div></div>
+  </div>
+
+  <nav class="tab-bar">
+    <a href="index.html" class="tab-item"><span class="icon">🏠</span><span>總覽</span></a>
+    <a href="add.html" class="tab-add"><div class="add-btn">＋</div></a>
+    <a href="settlement.html" class="tab-item"><span class="icon">🧾</span><span>結算</span></a>
+    <a href="stats.html" class="tab-item active"><span class="icon">📊</span><span>統計</span></a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const CATEGORY_ICONS = {
+      '飲食': '🍽️', '交通': '🚗', '購物': '🛍️', '旅遊': '✈️',
+      '運動/活動': '🏃', '醫療': '💊', '器材': '🏋️', '其他': '📌'
+    };
+
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth() + 1;
+
+    document.getElementById('prevMonth').onclick = () => {
+      currentMonth--;
+      if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+      loadData();
+    };
+    document.getElementById('nextMonth').onclick = () => {
+      currentMonth++;
+      if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+      loadData();
+    };
+
+    async function loadData() {
+      document.getElementById('monthLabel').textContent = `${currentYear}年${currentMonth}月`;
+      document.getElementById('totalExpense').textContent = '—';
+      document.getElementById('totalIncome').textContent = '—';
+      document.getElementById('catList').innerHTML = '<div class="loading">載入中…</div>';
+
+      try {
+        const data = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
+        const records = data.records || [];
+
+        // 分類統計只算個人支出＋共同/家庭支出（綸的份額），分期款項不算類別（用途各異，另外看月結算）
+        const CATEGORIZED_SHEETS = ['expense_personal', 'expense_shared', 'expense_family'];
+
+        let totalExpense = 0, totalIncome = 0;
+        const catMap = {};
+
+        records.forEach(r => {
+          const amt = Number(r.amount);
+          if (r.type === 'income') {
+            totalIncome += amt;
+            return;
+          }
+          totalExpense += amt;
+          if (CATEGORIZED_SHEETS.includes(r.sheet)) {
+            catMap[r.category] = (catMap[r.category] || 0) + amt;
+          }
+        });
+
+        document.getElementById('totalExpense').textContent = '$' + totalExpense.toLocaleString();
+        document.getElementById('totalIncome').textContent = '$' + totalIncome.toLocaleString();
+
+        const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+        const categorizedTotal = cats.reduce((s, [, amt]) => s + amt, 0);
+        const list = document.getElementById('catList');
+
+        if (cats.length === 0) {
+          list.innerHTML = '<div class="empty-state"><div class="emoji">📭</div>這個月還沒有支出記錄</div>';
+          return;
+        }
+
+        list.innerHTML = cats.map(([name, amt]) => {
+          const pct = categorizedTotal > 0 ? Math.round(amt / categorizedTotal * 100) : 0;
+          return `
+          <div class="cat-row">
+            <div class="cat-row-top">
+              <div class="cat-row-left">
+                <span class="cat-icon">${CATEGORY_ICONS[name] || '📌'}</span>
+                <span class="cat-name">${name}</span>
+              </div>
+              <span class="cat-amount">$${amt.toLocaleString()}</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="cat-pct">${pct}%</div>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        document.getElementById('catList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗</div>';
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

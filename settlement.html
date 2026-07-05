@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>月結算</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #FAF7F2;
+      color: #3A2E24;
+      min-height: 100vh;
+      padding-bottom: 90px;
+    }
+    .header {
+      background: #7A5C3E; color: white;
+      padding: 16px 20px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .month-nav { display: flex; align-items: center; gap: 10px; }
+    .month-nav button {
+      background: rgba(255,255,255,0.2); border: none; color: white;
+      width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer;
+    }
+    .month-label { font-size: 15px; font-weight: 500; min-width: 76px; text-align: center; }
+
+    .content { padding: 14px 16px; }
+
+    /* 可使用金額（大顯示） */
+    .available-card {
+      background: #7A5C3E; color: white;
+      border-radius: 16px; padding: 20px;
+      text-align: center; margin-bottom: 14px;
+      box-shadow: 0 2px 8px rgba(122,92,62,0.3);
+    }
+    .available-card .label { font-size: 13px; opacity: 0.8; margin-bottom: 6px; }
+    .available-card .amount { font-size: 38px; font-weight: 700; }
+
+    /* 區塊 */
+    .section { margin-bottom: 16px; }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .section-title { font-size: 13px; font-weight: 600; color: #7A5C3E; }
+    .section-total { font-size: 14px; font-weight: 700; }
+    .section-total.income { color: #2E7D32; }
+    .section-total.expense { color: #C62828; }
+
+    .item-card {
+      background: white; border-radius: 12px;
+      padding: 13px 14px; margin-bottom: 7px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .item-left .main { font-size: 14px; font-weight: 600; }
+    .item-left .sub  { font-size: 11px; color: #999; margin-top: 2px; }
+    .item-right .amount { font-size: 15px; font-weight: 700; }
+    .item-right .amount.income  { color: #2E7D32; }
+    .item-right .amount.expense { color: #C62828; }
+
+    /* 新增卡費按鈕 */
+    .add-bill-form {
+      background: white; border-radius: 12px;
+      padding: 14px; margin-bottom: 7px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .add-bill-form .row { margin-bottom: 10px; }
+    .add-bill-form label { font-size: 11px; color: #999; font-weight: 500; display: block; margin-bottom: 4px; }
+    .add-bill-form input, .add-bill-form select {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid #E8E0D8; border-radius: 10px;
+      font-size: 14px; color: #3A2E24; background: #FAF7F2;
+      -webkit-appearance: none; appearance: none;
+    }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .add-bill-btn {
+      width: 100%; padding: 11px;
+      background: #7A5C3E; color: white;
+      border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+
+    .add-toggle-btn {
+      background: none; border: 1.5px dashed #D4C5B5;
+      border-radius: 12px; padding: 11px;
+      width: 100%; color: #aaa; font-size: 13px;
+      cursor: pointer; margin-bottom: 7px;
+    }
+
+    /* 各類支出小卡 */
+    .expense-summary {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
+    }
+    .exp-card {
+      background: white; border-radius: 12px; padding: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .exp-card .label { font-size: 11px; color: #999; margin-bottom: 5px; }
+    .exp-card .val   { font-size: 16px; font-weight: 700; color: #C62828; }
+
+    .tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: white; border-top: 1px solid #E8E0D8;
+      display: flex; padding-bottom: env(safe-area-inset-bottom);
+    }
+    .tab-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; padding: 10px 0;
+      text-decoration: none; color: #bbb; font-size: 10px; gap: 3px;
+    }
+    .tab-item.active { color: #7A5C3E; }
+    .tab-item .icon { font-size: 22px; }
+    .tab-add {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 6px 0;
+      text-decoration: none;
+    }
+    .tab-add .add-btn {
+      width: 48px; height: 48px; background: #7A5C3E; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; color: white;
+      box-shadow: 0 2px 8px rgba(122,92,62,0.4); margin-top: -16px;
+    }
+    .loading { text-align: center; padding: 20px; color: #bbb; font-size: 14px; }
+    .toast {
+      position: fixed; bottom: 100px; left: 50%;
+      transform: translateX(-50%); background: #3A2E24; color: white;
+      padding: 10px 20px; border-radius: 20px; font-size: 14px;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>月結算</h1>
+    <div class="month-nav">
+      <button id="prevMonth">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="nextMonth">›</button>
+    </div>
+  </div>
+
+  <div class="content" id="content">
+    <div class="loading">載入中…</div>
+  </div>
+
+  <nav class="tab-bar">
+    <a href="index.html" class="tab-item"><span class="icon">🏠</span><span>總覽</span></a>
+    <a href="add.html" class="tab-add"><div class="add-btn">＋</div></a>
+    <a href="settlement.html" class="tab-item active"><span class="icon">🧾</span><span>結算</span></a>
+    <a href="stats.html" class="tab-item"><span class="icon">📊</span><span>統計</span></a>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script>
+    const BANKS = ['富邦', '玉山', '國泰', '元大', '其他'];
+    let currentYear  = new Date().getFullYear();
+    let currentMonth = new Date().getMonth() + 1;
+    let showAddBill  = false;
+
+    document.getElementById('prevMonth').onclick = () => {
+      currentMonth--; if (currentMonth < 1) { currentMonth = 12; currentYear--; } loadData();
+    };
+    document.getElementById('nextMonth').onclick = () => {
+      currentMonth++; if (currentMonth > 12) { currentMonth = 1; currentYear++; } loadData();
+    };
+
+    function fmt(n) { return '$' + Math.abs(n).toLocaleString(); }
+    function fmtSigned(n) { return (n >= 0 ? '+' : '-') + fmt(n); }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    async function addBill() {
+      const date   = document.getElementById('bill_date').value;
+      const bank   = document.getElementById('bill_bank').value;
+      const amount = parseFloat(document.getElementById('bill_amount').value);
+      const note   = document.getElementById('bill_note').value.trim();
+      if (!date || !amount) { showToast('請填日期和金額'); return; }
+
+      const ym = `${currentYear}.${String(currentMonth).padStart(2,'0')}`;
+      await API.apiPost('addRecord', {
+        sheet: 'card_bills',
+        month: ym, date, bank, amount, note
+      });
+      showToast('✅ 已新增');
+      loadData();
+    }
+
+    async function loadData() {
+      document.getElementById('monthLabel').textContent =
+        `${currentYear}年${currentMonth}月`;
+      document.getElementById('content').innerHTML = '<div class="loading">載入中…</div>';
+
+      let d;
+      try {
+        d = await API.apiGet('getMonthSummary', { year: currentYear, month: currentMonth });
+      } catch (e) {
+        document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
+        return;
+      }
+
+      const inc = d.income || {};
+      const exp = d.expenses || {};
+      const available = d.available ?? 0;
+
+      // 今天日期預設
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+      document.getElementById('content').innerHTML = `
+        <!-- 可使用金額 -->
+        <div class="available-card">
+          <div class="label">可使用金額（收入 − 卡費）</div>
+          <div class="amount">${fmtSigned(available)}</div>
+        </div>
+
+        <!-- 收入 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">💰 收入</span>
+            <span class="section-total income">${fmt(inc.total || 0)}</span>
+          </div>
+          ${inc.salary ? `<div class="item-card">
+            <div class="item-left"><div class="main">武士薪水</div></div>
+            <div class="item-right"><div class="amount income">+${fmt(inc.salary)}</div></div>
+          </div>` : ''}
+          ${inc.cash ? `<div class="item-card">
+            <div class="item-left"><div class="main">柔力現金收入</div></div>
+            <div class="item-right"><div class="amount income">+${fmt(inc.cash)}</div></div>
+          </div>` : ''}
+          ${inc.prepay ? `<div class="item-card">
+            <div class="item-left"><div class="main">預收款</div></div>
+            <div class="item-right"><div class="amount income">+${fmt(inc.prepay)}</div></div>
+          </div>` : ''}
+          ${!inc.total ? '<div style="text-align:center;color:#bbb;font-size:13px;padding:12px">尚未記入收入</div>' : ''}
+        </div>
+
+        <!-- 卡費帳單 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">💳 卡費帳單</span>
+            <span class="section-total expense">${fmt(d.bills?.total || 0)}</span>
+          </div>
+          ${(d.bills?.items || []).map(b => `
+            <div class="item-card">
+              <div class="item-left">
+                <div class="main">${b.bank}</div>
+                <div class="sub">${b.date}${b.note ? '・' + b.note : ''}</div>
+              </div>
+              <div class="item-right"><div class="amount expense">-${fmt(b.amount)}</div></div>
+            </div>`).join('')}
+
+          <!-- 新增卡費表單 -->
+          <button class="add-toggle-btn" id="toggleBillBtn" onclick="toggleAddBill()">
+            ＋ 新增卡費帳單
+          </button>
+          <div id="addBillForm" style="display:none">
+            <div class="add-bill-form">
+              <div class="two-col">
+                <div class="row">
+                  <label>扣款日期</label>
+                  <input type="date" id="bill_date" value="${todayStr}">
+                </div>
+                <div class="row">
+                  <label>銀行</label>
+                  <select id="bill_bank">
+                    ${BANKS.map(b => `<option>${b}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <label>金額</label>
+                <input type="number" id="bill_amount" placeholder="0" inputmode="numeric">
+              </div>
+              <div class="row">
+                <label>備註（可略）</label>
+                <input type="text" id="bill_note" placeholder="">
+              </div>
+              <button class="add-bill-btn" onclick="addBill()">新增</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 各類支出小結 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">📋 本月支出小結</span>
+          </div>
+          <div class="expense-summary">
+            <div class="exp-card">
+              <div class="label">個人支出</div>
+              <div class="val">${fmt(exp.personal || 0)}</div>
+            </div>
+            <div class="exp-card">
+              <div class="label">共同支出（綸）</div>
+              <div class="val">${fmt(exp.shared_olan || 0)}</div>
+            </div>
+            <div class="exp-card">
+              <div class="label">家庭支出（綸）</div>
+              <div class="val">${fmt(exp.family_olan || 0)}</div>
+            </div>
+            <div class="exp-card">
+              <div class="label">分期款項</div>
+              <div class="val">${fmt(exp.installment || 0)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleAddBill() {
+      const form = document.getElementById('addBillForm');
+      const btn  = document.getElementById('toggleBillBtn');
+      const show = form.style.display === 'none';
+      form.style.display = show ? 'block' : 'none';
+      btn.textContent = show ? '✕ 取消' : '＋ 新增卡費帳單';
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
