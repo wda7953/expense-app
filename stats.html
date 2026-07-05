@@ -34,6 +34,11 @@
       border-radius: 50%; font-size: 16px; cursor: pointer;
     }
     .month-label { font-size: 15px; font-weight: 500; min-width: 80px; text-align: center; }
+    input.month-label {
+      background: transparent; border: none; color: white;
+      font-family: inherit; cursor: pointer; -webkit-appearance: none; appearance: none;
+    }
+    input.month-label::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.7; }
 
     .content { padding: 16px; }
 
@@ -129,7 +134,7 @@
     <h1>統計</h1>
     <div class="month-nav">
       <button id="prevMonth">‹</button>
-      <span class="month-label" id="monthLabel"></span>
+      <input type="month" class="month-label" id="monthLabel">
       <button id="nextMonth">›</button>
     </div>
   </div>
@@ -164,22 +169,42 @@
       '運動/活動': '🏃', '醫療': '💊', '器材': '🏋️', '其他': '📌'
     };
 
-    let currentYear = new Date().getFullYear();
-    let currentMonth = new Date().getMonth() + 1;
+    const YM_KEY = 'expense_current_ym';
+    const savedYM = localStorage.getItem(YM_KEY);
+    const initYM = savedYM ? savedYM.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1];
+    let currentYear = initYM[0];
+    let currentMonth = initYM[1];
+
+    function saveYM() {
+      localStorage.setItem(YM_KEY, `${currentYear}-${String(currentMonth).padStart(2, '0')}`);
+    }
+
+    function syncMonthInput() {
+      document.getElementById('monthLabel').value = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    }
 
     document.getElementById('prevMonth').onclick = () => {
       currentMonth--;
       if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+      saveYM();
       loadData();
     };
     document.getElementById('nextMonth').onclick = () => {
       currentMonth++;
       if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+      saveYM();
+      loadData();
+    };
+    document.getElementById('monthLabel').onchange = (e) => {
+      const [y, m] = e.target.value.split('-').map(Number);
+      if (!y || !m) return;
+      currentYear = y; currentMonth = m;
+      saveYM();
       loadData();
     };
 
     async function loadData() {
-      document.getElementById('monthLabel').textContent = `${currentYear}年${currentMonth}月`;
+      syncMonthInput();
       document.getElementById('totalExpense').textContent = '—';
       document.getElementById('totalIncome').textContent = '—';
       document.getElementById('catList').innerHTML = '<div class="loading">載入中…</div>';
