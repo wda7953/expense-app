@@ -100,9 +100,26 @@
     .exp-card {
       background: white; border-radius: 12px; padding: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      cursor: pointer;
     }
-    .exp-card .label { font-size: 11px; color: #999; margin-bottom: 5px; }
+    .exp-card .label { font-size: 11px; color: #999; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
     .exp-card .val   { font-size: 16px; font-weight: 700; color: #C62828; }
+    .chev { font-size: 10px; color: #ccc; transition: transform 0.2s; }
+    .chev.open { transform: rotate(90deg); }
+
+    .item-card.clickable { cursor: pointer; }
+    .detail-list { padding: 2px 4px 8px; }
+    .detail-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; margin-bottom: 6px;
+      background: #FAF7F2; border-radius: 8px; font-size: 12px;
+    }
+    .detail-name { font-weight: 600; color: #3A2E24; }
+    .detail-note { color: #aaa; font-size: 11px; margin-top: 1px; }
+    .detail-amount { font-weight: 700; }
+    .detail-date { color: #bbb; font-size: 10px; margin-top: 1px; text-align: right; }
+    .detail-empty { text-align: center; color: #ccc; font-size: 12px; padding: 8px; }
+    .hidden { display: none !important; }
 
     .tab-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -166,6 +183,41 @@
     let currentYear  = new Date().getFullYear();
     let currentMonth = new Date().getMonth() + 1;
     let showAddBill  = false;
+    let currentRecords = [];
+
+    const INCOME_LABEL = { 'inc-salary': '武士薪水', 'inc-cash': '現金收入', 'inc-prepay': '預收款' };
+
+    function toggleDetail(key) {
+      const el = document.getElementById(`detail-${key}`);
+      if (!el) return;
+      const opening = el.classList.contains('hidden');
+      if (opening) {
+        let records;
+        if (key.startsWith('inc-')) {
+          records = currentRecords.filter(r => r.type === 'income' && r.category === INCOME_LABEL[key]);
+        } else {
+          const sheetKey = key.replace('exp-', '');
+          records = currentRecords.filter(r => r.type === 'expense' && r.sheet === sheetKey);
+        }
+        records.sort((a, b) => new Date(b.date) - new Date(a.date));
+        el.innerHTML = records.length
+          ? records.map(r => `
+              <div class="detail-row">
+                <div>
+                  <div class="detail-name">${r.category}</div>
+                  ${r.note ? `<div class="detail-note">${r.note}</div>` : ''}
+                </div>
+                <div>
+                  <div class="detail-amount">${fmt(r.amount)}</div>
+                  <div class="detail-date">${r.date}</div>
+                </div>
+              </div>`).join('')
+          : '<div class="detail-empty">沒有明細（可能是舊資料沒有記錄日期）</div>';
+      }
+      el.classList.toggle('hidden', !opening);
+      const chev = document.getElementById(`chev-${key}`);
+      if (chev) chev.classList.toggle('open', opening);
+    }
 
     document.getElementById('prevMonth').onclick = () => {
       currentMonth--; if (currentMonth < 1) { currentMonth = 12; currentYear--; } loadData();
@@ -207,6 +259,8 @@
       let d;
       try {
         d = await API.apiGet('getMonthSummary', { year: currentYear, month: currentMonth });
+        const r = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
+        currentRecords = r.records || [];
       } catch (e) {
         document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
         return;
@@ -233,18 +287,21 @@
             <span class="section-title">💰 收入</span>
             <span class="section-total income">${fmt(inc.total || 0)}</span>
           </div>
-          ${inc.salary ? `<div class="item-card">
+          ${inc.salary ? `<div class="item-card clickable" onclick="toggleDetail('inc-salary')">
             <div class="item-left"><div class="main">武士薪水</div></div>
             <div class="item-right"><div class="amount income">+${fmt(inc.salary)}</div></div>
-          </div>` : ''}
-          ${inc.cash ? `<div class="item-card">
+          </div>
+          <div class="detail-list hidden" id="detail-inc-salary"></div>` : ''}
+          ${inc.cash ? `<div class="item-card clickable" onclick="toggleDetail('inc-cash')">
             <div class="item-left"><div class="main">柔力現金收入</div></div>
             <div class="item-right"><div class="amount income">+${fmt(inc.cash)}</div></div>
-          </div>` : ''}
-          ${inc.prepay ? `<div class="item-card">
+          </div>
+          <div class="detail-list hidden" id="detail-inc-cash"></div>` : ''}
+          ${inc.prepay ? `<div class="item-card clickable" onclick="toggleDetail('inc-prepay')">
             <div class="item-left"><div class="main">預收款</div></div>
             <div class="item-right"><div class="amount income">+${fmt(inc.prepay)}</div></div>
-          </div>` : ''}
+          </div>
+          <div class="detail-list hidden" id="detail-inc-prepay"></div>` : ''}
           ${!inc.total ? '<div style="text-align:center;color:#bbb;font-size:13px;padding:12px">尚未記入收入</div>' : ''}
         </div>
 
@@ -300,23 +357,27 @@
             <span class="section-title">📋 本月支出小結</span>
           </div>
           <div class="expense-summary">
-            <div class="exp-card">
-              <div class="label">個人支出</div>
+            <div class="exp-card" onclick="toggleDetail('exp-expense_personal')">
+              <div class="label">個人支出 <span class="chev" id="chev-exp-expense_personal">▸</span></div>
               <div class="val">${fmt(exp.personal || 0)}</div>
             </div>
-            <div class="exp-card">
-              <div class="label">共同支出（綸）</div>
+            <div class="exp-card" onclick="toggleDetail('exp-expense_shared')">
+              <div class="label">共同支出（綸） <span class="chev" id="chev-exp-expense_shared">▸</span></div>
               <div class="val">${fmt(exp.shared_olan || 0)}</div>
             </div>
-            <div class="exp-card">
-              <div class="label">家庭支出（綸）</div>
+            <div class="exp-card" onclick="toggleDetail('exp-expense_family')">
+              <div class="label">家庭支出（綸） <span class="chev" id="chev-exp-expense_family">▸</span></div>
               <div class="val">${fmt(exp.family_olan || 0)}</div>
             </div>
-            <div class="exp-card">
-              <div class="label">分期款項</div>
+            <div class="exp-card" onclick="toggleDetail('exp-expense_installment')">
+              <div class="label">分期款項 <span class="chev" id="chev-exp-expense_installment">▸</span></div>
               <div class="val">${fmt(exp.installment || 0)}</div>
             </div>
           </div>
+          <div class="detail-list hidden" id="detail-exp-expense_personal"></div>
+          <div class="detail-list hidden" id="detail-exp-expense_shared"></div>
+          <div class="detail-list hidden" id="detail-exp-expense_family"></div>
+          <div class="detail-list hidden" id="detail-exp-expense_installment"></div>
         </div>
       `;
     }
