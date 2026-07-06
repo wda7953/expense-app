@@ -250,6 +250,14 @@
     };
 
     function fmt(n) { return '$' + Math.abs(n).toLocaleString(); }
+
+    // 保底處理：卡費日期若是舊版後端回傳的 ISO 時間戳，改用台北時區重新取日期，避免顯示成前一天
+    function fmtBillDate(dateStr) {
+      if (!dateStr) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+      const d = new Date(dateStr);
+      return isNaN(d) ? dateStr : d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+    }
     function fmtSigned(n) { return (n >= 0 ? '+' : '-') + fmt(n); }
 
     function showToast(msg) {
@@ -337,7 +345,7 @@
             <div class="item-card">
               <div class="item-left">
                 <div class="main">${b.bank}</div>
-                <div class="sub">${b.date}${b.note ? '・' + b.note : ''}</div>
+                <div class="sub">${fmtBillDate(b.date)}${b.note ? '・' + b.note : ''}</div>
               </div>
               <div class="item-right"><div class="amount expense">-${fmt(b.amount)}</div></div>
             </div>`).join('')}
