@@ -1,5 +1,11 @@
 // 個人記帳 PWA - Google Apps Script 後端
-// 貼到 Google Apps Script 後部署為 Web App（Anyone 可存取）
+// 部署為 Web App（存取權：任何人）。安全靠下方的共享密鑰 token 把關：
+// 前端每次呼叫都要帶正確的 ?token=，不對就擋掉。
+// ⚠️ 這是「自己資料、低風險」的輕量防護，能擋隨機掃描的機器人，
+//    但 token 寫在公開前端原始碼裡仍看得到，不適合用在學員個資那種敏感系統。
+
+// ── 共享密鑰（前端 js/api.js 的 API_TOKEN 必須一模一樣）──
+const API_TOKEN = 'exp7k2m9qf4wx8vn3';
 
 // ── 工作表名稱 ──────────────────────────────────
 const SHEETS = {
@@ -26,6 +32,7 @@ const EXPENSE_TYPES = ['expense_personal', 'expense_shared', 'expense_family', '
 
 // ── 路由 ────────────────────────────────────────
 function doGet(e) {
+  if (e.parameter.token !== API_TOKEN) return jsonErr('unauthorized');
   const action = e.parameter.action;
   try {
     if (action === 'getRecords')      return jsonOk(getRecords(e));
@@ -38,6 +45,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  if (e.parameter.token !== API_TOKEN) return jsonErr('unauthorized');
   const action = e.parameter.action;
   const data = JSON.parse(e.postData.contents);
   try {
