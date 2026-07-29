@@ -41,6 +41,8 @@ function doGet(e) {
     if (action === 'getMonthSummary') return jsonOk(getMonthSummary(e));
     if (action === 'getMonthRecords') return jsonOk(getMonthRecords(e));
     if (action === 'getRate')         return jsonOk(getRate(e));
+    if (action === 'getProjects')       return jsonOk(getProjects());
+    if (action === 'getProjectRecords') return jsonOk(getProjectRecords(e));
     return jsonErr('unknown action');
   } catch (err) {
     return jsonErr(err.message);
@@ -150,6 +152,60 @@ function getRate(e) {
   } catch (err) {
     return { rate: null, currency };
   }
+}
+
+// ── 專案清單（依 project 分組，回傳名稱 + 台幣總計 + 上次幣別）──
+function getProjects() {
+  const sheet = getOrCreateSheet(SHEETS.expense_project, HEADERS.expense_project);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { projects: [] };
+  const hdr = rows[0];
+  const pIdx = hdr.indexOf('project');
+  const aIdx = hdr.indexOf('amount');
+  const cIdx = hdr.indexOf('currency');
+  const dIdx = hdr.indexOf('date');
+
+  const map = {}; // project -> { total, lastCurrency, lastDate }
+  rows.slice(1).forEach(row => {
+    const name = String(row[pIdx] || '').trim();
+    if (!name) return;
+    if (!map[name]) map[name] = { project: name, total: 0, lastCurrency: 'TWD', lastDate: '' };
+    map[name].total += Number(row[aIdx]) || 0;
+    const d = row[dIdx] ? fmtDate(toDateObj(row[dIdx])) : '';
+    if (d >= map[name].lastDate) { // 以最後一筆的幣別當該專案預設
+      map[name].lastDate = d;
+      map[name].lastCurrency = String(row[cIdx] || 'TWD').toUpperCase();
+    }
+  });
+  return { projects: Object.values(map).sort((a, b) => b.project.localeCompare(a.project)) };
+}
+
+// ── 單一專案的所有明細（附幣別小計）────────────────
+function getProjectRecords(e) {
+  const target = String(e.parameter.project || '').trim();
+  const sheet = getOrCreateSheet(SHEETS.expense_project, HEADERS.expense_project);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { records: [], total: 0, byCurrency: {} };
+  const hdr = rows[0];
+
+  const records = [];
+  const byCurrency = {}; // currency -> 原幣加總
+  let total = 0;
+  rows.slice(1).forEach((row, i) => {
+    const obj = { _rowIndex: i + 2 };
+    hdr.forEach((h, j) => { obj[h] = row[j]; });
+    if (String(obj.project || '').trim() !== target) return;
+    if (obj.date) obj.date = fmtDate(toDateObj(obj.date));
+    const cur = String(obj.currency || 'TWD').toUpperCase();
+    obj.orig_amount = Number(obj.orig_amount) || 0;
+    obj.rate = Number(obj.rate) || 0;
+    obj.amount = Number(obj.amount) || 0;
+    byCurrency[cur] = (byCurrency[cur] || 0) + obj.orig_amount;
+    total += obj.amount;
+    records.push(obj);
+  });
+  records.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { records, total, byCurrency };
 }
 
 // ── 月份總覽（for 結算頁）────────────────────────
