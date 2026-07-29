@@ -14,6 +14,7 @@ const SHEETS = {
   expense_shared:      'expense_shared',
   expense_family:      'expense_family',
   expense_installment: 'expense_installment',
+  expense_project:     'expense_project',
   card_bills:          'card_bills'
 };
 
@@ -24,11 +25,12 @@ const HEADERS = {
   expense_shared:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
   expense_family:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
   expense_installment: ['month', 'name', 'per_amount', 'total_amount', 'current_period', 'total_periods', 'payment', 'note', 'date'],
+  expense_project:     ['month', 'project', 'category', 'orig_amount', 'currency', 'rate', 'amount', 'payment', 'note', 'date'],
   card_bills:          ['month', 'date', 'bank', 'amount', 'note']
 };
 
 // 會出現在「最近記錄」時間軸與分類統計的支出類型（card_bills 屬於結算機制，不算個人消費分類）
-const EXPENSE_TYPES = ['expense_personal', 'expense_shared', 'expense_family', 'expense_installment'];
+const EXPENSE_TYPES = ['expense_personal', 'expense_shared', 'expense_family', 'expense_installment', 'expense_project'];
 
 // ── 路由 ────────────────────────────────────────
 function doGet(e) {
@@ -181,6 +183,7 @@ function getMonthSummary(e) {
   const sharedOlanTotal  = sumSheet(SHEETS.expense_shared,      'olan_amount');
   const familyOlanTotal  = sumSheet(SHEETS.expense_family,      'olan_amount');
   const installmentTotal = sumSheet(SHEETS.expense_installment, 'per_amount');
+  const projectTotal     = sumSheet(SHEETS.expense_project,     'amount');
 
   return {
     income: { total: totalIncome, salary: salaryIncome, cash: cashIncome, prepay: prepayIncome },
@@ -189,7 +192,8 @@ function getMonthSummary(e) {
       personal:    personalTotal,
       shared_olan: sharedOlanTotal,
       family_olan: familyOlanTotal,
-      installment: installmentTotal
+      installment: installmentTotal,
+      project:     projectTotal
     },
     available: totalIncome - totalBills
   };
