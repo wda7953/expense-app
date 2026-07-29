@@ -40,6 +40,7 @@ function doGet(e) {
     if (action === 'getRecords')      return jsonOk(getRecords(e));
     if (action === 'getMonthSummary') return jsonOk(getMonthSummary(e));
     if (action === 'getMonthRecords') return jsonOk(getMonthRecords(e));
+    if (action === 'getRate')         return jsonOk(getRate(e));
     return jsonErr('unknown action');
   } catch (err) {
     return jsonErr(err.message);
@@ -119,6 +120,36 @@ function getRecords(e) {
     });
 
   return { records };
+}
+
+// ── 台銀當天牌告匯率（即期賣出，缺即期則退回現金賣出）──
+function getRate(e) {
+  const currency = String(e.parameter.currency || '').toUpperCase();
+  if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD' };
+
+  // 台銀 CSV 欄位：幣別,匯率,現金,即期,遠期10~180天(共7欄)  → 本行買入區塊(index 0~10)
+  //              　匯率,現金,即期,遠期10~180天(共7欄)      → 本行賣出區塊(index 11~20)
+  // 實測（2026-07-29 取自 Wayback Machine 歷史快照，因原站對 curl 有機器人驗證擋掉直連）：
+  // USD,本行買入,31.08500,31.43500,...,本行賣出,31.75500,31.53500,...
+  // index 12 = 現金賣出(31.755)，index 13 = 即期賣出(31.535)
+  // 部分幣別（例如 KRW 韓元）台銀不提供即期匯率、即期欄位為 0，
+  // 此時退回用現金賣出欄位（index 12）當作近似匯率，兩者皆無效才回傳 null。
+  const SPOT_SELL_IDX = 13; // 即期賣出欄位索引（依實測確認，非文件假設的 index 5）
+  const CASH_SELL_IDX = 12; // 現金賣出欄位索引（即期缺值時的備援，如 KRW）
+  try {
+    const csv = UrlFetchApp.fetch('https://rate.bot.com.tw/xrt/flcsv/0/day', {
+      muteHttpExceptions: true
+    }).getContentText();
+    const line = csv.split('\n').find(l => l.split(',')[0].trim().toUpperCase() === currency);
+    if (!line) return { rate: null, currency };
+    const cols = line.split(',');
+    let rate = parseFloat(cols[SPOT_SELL_IDX]);
+    if (isNaN(rate) || rate <= 0) rate = parseFloat(cols[CASH_SELL_IDX]);
+    if (isNaN(rate) || rate <= 0) return { rate: null, currency };
+    return { rate, currency };
+  } catch (err) {
+    return { rate: null, currency };
+  }
 }
 
 // ── 月份總覽（for 結算頁）────────────────────────
