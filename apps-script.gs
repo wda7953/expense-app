@@ -124,6 +124,15 @@ function getRecords(e) {
   return { records };
 }
 
+// ── 一次性授權用（在編輯器手動執行這支，按「允許」授予對外連網權限）──
+// 因為記帳後端第一次用到 UrlFetchApp，需擁有者親自授權 script.external_request。
+// 執行後在「執行紀錄」看到 200 與匯率 JSON 就代表授權成功，之後重新部署即可。
+function authorize() {
+  const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/USD', { muteHttpExceptions: true });
+  Logger.log('code: ' + res.getResponseCode());
+  Logger.log('body: ' + res.getContentText().slice(0, 120));
+}
+
 // ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
 // 來源：open.er-api.com（免金鑰、每日更新、含台幣，市場中間價）。
 // 原本想用台銀牌告，但台銀 CSV 已加機器人驗證(JS Challenge)，UrlFetchApp/一般 client 皆抓不到，
