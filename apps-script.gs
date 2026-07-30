@@ -125,15 +125,16 @@ function getRecords(e) {
 }
 
 // ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
-// 優先用台銀牌告（即期賣出，缺則現金賣出）；台銀抓不到才退回 open.er-api.com（市場中間價）。
-// 回傳的 source 標示實際來源：'bot'=台銀牌告、'erapi'=備援中間價。此為參考匯率，前端可手動覆蓋。
+// 優先用 Yahoo 股市即期價（跟使用者在 Yahoo 看到的一致、盤中即時）；抓不到才退回 open.er-api.com。
+// 註：台銀牌告已加機器人驗證，UrlFetchApp（含 Google 伺服器）皆被擋回挑戰頁，無法自動取得。
+// 回傳的 source 標示實際來源：'yahoo' / 'erapi'。此為參考匯率，前端可依信用卡帳單手動覆蓋。
 function getRate(e) {
   const currency = String(e.parameter.currency || '').toUpperCase();
   if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD', source: 'fixed' };
 
-  // 1) 台銀牌告 CSV（flcsv）
-  const bot = fetchBotRate(currency);
-  if (bot) return { rate: bot, currency, source: 'bot' };
+  // 1) Yahoo 股市：{幣別}TWD=X
+  const y = fetchYahooRate(currency);
+  if (y) return { rate: y, currency, source: 'yahoo' };
 
   // 2) 備援：open.er-api.com
   const fb = fetchErApiRate(currency);
@@ -142,19 +143,17 @@ function getRate(e) {
   return { rate: null, currency };
 }
 
-// 台銀 flcsv：每列「買入區塊(0~10) + 賣出區塊(11~21)」，index 12=現金賣出、index 13=即期賣出。
-// 韓元等無即期報價者即期為 0，退回現金賣出。抓到挑戰頁/無此幣別時回傳 null。
-function fetchBotRate(currency) {
+// Yahoo Finance chart API：回傳 meta.regularMarketPrice 即 1 單位外幣的台幣價。
+// 需帶瀏覽器 User-Agent，否則 Yahoo 可能擋掉。
+function fetchYahooRate(currency) {
   try {
-    const res = UrlFetchApp.fetch('https://rate.bot.com.tw/xrt/flcsv/0/day', { muteHttpExceptions: true });
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(currency) + 'TWD=X?interval=1d&range=1d';
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (res.getResponseCode() !== 200) return null;
-    const csv = res.getContentText();
-    const line = csv.split('\n').find(l => l.split(',')[0].trim().toUpperCase() === currency);
-    if (!line) return null; // 找不到該幣別列（含被擋回傳 HTML 的情況）
-    const cols = line.split(',');
-    let rate = parseFloat(cols[13]);              // 即期賣出
-    if (isNaN(rate) || rate <= 0) rate = parseFloat(cols[12]); // 退回現金賣出
-    return (isNaN(rate) || rate <= 0) ? null : rate;
+    const data = JSON.parse(res.getContentText());
+    const meta = data && data.chart && data.chart.result && data.chart.result[0] && data.chart.result[0].meta;
+    const rate = meta ? Number(meta.regularMarketPrice) : null;
+    return (!rate || rate <= 0) ? null : rate;
   } catch (err) {
     return null;
   }
