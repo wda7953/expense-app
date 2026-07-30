@@ -125,24 +125,50 @@ function getRecords(e) {
 }
 
 // ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
-// 來源：open.er-api.com（免金鑰、每日更新、含台幣，市場中間價）。
-// 原本想用台銀牌告，但台銀 CSV 已加機器人驗證(JS Challenge)，UrlFetchApp/一般 client 皆抓不到，
-// 故改用此穩定來源。此為參考匯率，前端可依信用卡帳單實際入帳匯率手動覆蓋。
+// 優先用台銀牌告（即期賣出，缺則現金賣出）；台銀抓不到才退回 open.er-api.com（市場中間價）。
+// 回傳的 source 標示實際來源：'bot'=台銀牌告、'erapi'=備援中間價。此為參考匯率，前端可手動覆蓋。
 function getRate(e) {
   const currency = String(e.parameter.currency || '').toUpperCase();
-  if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD' };
+  if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD', source: 'fixed' };
 
+  // 1) 台銀牌告 CSV（flcsv）
+  const bot = fetchBotRate(currency);
+  if (bot) return { rate: bot, currency, source: 'bot' };
+
+  // 2) 備援：open.er-api.com
+  const fb = fetchErApiRate(currency);
+  if (fb) return { rate: fb, currency, source: 'erapi' };
+
+  return { rate: null, currency };
+}
+
+// 台銀 flcsv：每列「買入區塊(0~10) + 賣出區塊(11~21)」，index 12=現金賣出、index 13=即期賣出。
+// 韓元等無即期報價者即期為 0，退回現金賣出。抓到挑戰頁/無此幣別時回傳 null。
+function fetchBotRate(currency) {
   try {
-    const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(currency), {
-      muteHttpExceptions: true
-    });
-    if (res.getResponseCode() !== 200) return { rate: null, currency };
+    const res = UrlFetchApp.fetch('https://rate.bot.com.tw/xrt/flcsv/0/day', { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return null;
+    const csv = res.getContentText();
+    const line = csv.split('\n').find(l => l.split(',')[0].trim().toUpperCase() === currency);
+    if (!line) return null; // 找不到該幣別列（含被擋回傳 HTML 的情況）
+    const cols = line.split(',');
+    let rate = parseFloat(cols[13]);              // 即期賣出
+    if (isNaN(rate) || rate <= 0) rate = parseFloat(cols[12]); // 退回現金賣出
+    return (isNaN(rate) || rate <= 0) ? null : rate;
+  } catch (err) {
+    return null;
+  }
+}
+
+function fetchErApiRate(currency) {
+  try {
+    const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(currency), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return null;
     const data = JSON.parse(res.getContentText());
     const rate = (data && data.result === 'success' && data.rates) ? Number(data.rates.TWD) : null;
-    if (!rate || rate <= 0) return { rate: null, currency };
-    return { rate, currency };
+    return (!rate || rate <= 0) ? null : rate;
   } catch (err) {
-    return { rate: null, currency };
+    return null;
   }
 }
 
