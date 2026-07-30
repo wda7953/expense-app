@@ -14,6 +14,7 @@ const SHEETS = {
   expense_shared:      'expense_shared',
   expense_family:      'expense_family',
   expense_installment: 'expense_installment',
+  expense_project:     'expense_project',
   card_bills:          'card_bills'
 };
 
@@ -24,11 +25,12 @@ const HEADERS = {
   expense_shared:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
   expense_family:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
   expense_installment: ['month', 'name', 'per_amount', 'total_amount', 'current_period', 'total_periods', 'payment', 'note', 'date'],
+  expense_project:     ['month', 'project', 'category', 'orig_amount', 'currency', 'rate', 'amount', 'payment', 'note', 'date'],
   card_bills:          ['month', 'date', 'bank', 'amount', 'note']
 };
 
 // 會出現在「最近記錄」時間軸與分類統計的支出類型（card_bills 屬於結算機制，不算個人消費分類）
-const EXPENSE_TYPES = ['expense_personal', 'expense_shared', 'expense_family', 'expense_installment'];
+const EXPENSE_TYPES = ['expense_personal', 'expense_shared', 'expense_family', 'expense_installment', 'expense_project'];
 
 // ── 路由 ────────────────────────────────────────
 function doGet(e) {
@@ -38,6 +40,9 @@ function doGet(e) {
     if (action === 'getRecords')      return jsonOk(getRecords(e));
     if (action === 'getMonthSummary') return jsonOk(getMonthSummary(e));
     if (action === 'getMonthRecords') return jsonOk(getMonthRecords(e));
+    if (action === 'getRate')         return jsonOk(getRate(e));
+    if (action === 'getProjects')       return jsonOk(getProjects());
+    if (action === 'getProjectRecords') return jsonOk(getProjectRecords(e));
     return jsonErr('unknown action');
   } catch (err) {
     return jsonErr(err.message);
@@ -119,6 +124,82 @@ function getRecords(e) {
   return { records };
 }
 
+// ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
+// 來源：open.er-api.com（免金鑰、每日更新、含台幣，市場中間價）。
+// 原本想用台銀牌告，但台銀 CSV 已加機器人驗證(JS Challenge)，UrlFetchApp/一般 client 皆抓不到，
+// 故改用此穩定來源。此為參考匯率，前端可依信用卡帳單實際入帳匯率手動覆蓋。
+function getRate(e) {
+  const currency = String(e.parameter.currency || '').toUpperCase();
+  if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD' };
+
+  try {
+    const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(currency), {
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return { rate: null, currency };
+    const data = JSON.parse(res.getContentText());
+    const rate = (data && data.result === 'success' && data.rates) ? Number(data.rates.TWD) : null;
+    if (!rate || rate <= 0) return { rate: null, currency };
+    return { rate, currency };
+  } catch (err) {
+    return { rate: null, currency };
+  }
+}
+
+// ── 專案清單（依 project 分組，回傳名稱 + 台幣總計 + 上次幣別）──
+function getProjects() {
+  const sheet = getOrCreateSheet(SHEETS.expense_project, HEADERS.expense_project);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { projects: [] };
+  const hdr = rows[0];
+  const pIdx = hdr.indexOf('project');
+  const aIdx = hdr.indexOf('amount');
+  const cIdx = hdr.indexOf('currency');
+  const dIdx = hdr.indexOf('date');
+
+  const map = {}; // project -> { total, lastCurrency, lastDate }
+  rows.slice(1).forEach(row => {
+    const name = String(row[pIdx] || '').trim();
+    if (!name) return;
+    if (!map[name]) map[name] = { project: name, total: 0, lastCurrency: 'TWD', lastDate: '' };
+    map[name].total += Number(row[aIdx]) || 0;
+    const d = row[dIdx] ? fmtDate(toDateObj(row[dIdx])) : '';
+    if (d >= map[name].lastDate) { // 以最後一筆的幣別當該專案預設
+      map[name].lastDate = d;
+      map[name].lastCurrency = String(row[cIdx] || 'TWD').toUpperCase();
+    }
+  });
+  return { projects: Object.values(map).sort((a, b) => b.project.localeCompare(a.project)) };
+}
+
+// ── 單一專案的所有明細（附幣別小計）────────────────
+function getProjectRecords(e) {
+  const target = String(e.parameter.project || '').trim();
+  const sheet = getOrCreateSheet(SHEETS.expense_project, HEADERS.expense_project);
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { records: [], total: 0, byCurrency: {} };
+  const hdr = rows[0];
+
+  const records = [];
+  const byCurrency = {}; // currency -> 原幣加總
+  let total = 0;
+  rows.slice(1).forEach((row, i) => {
+    const obj = { _rowIndex: i + 2 };
+    hdr.forEach((h, j) => { obj[h] = row[j]; });
+    if (String(obj.project || '').trim() !== target) return;
+    if (obj.date) obj.date = fmtDate(toDateObj(obj.date));
+    const cur = String(obj.currency || 'TWD').toUpperCase();
+    obj.orig_amount = Number(obj.orig_amount) || 0;
+    obj.rate = Number(obj.rate) || 0;
+    obj.amount = Number(obj.amount) || 0;
+    byCurrency[cur] = (byCurrency[cur] || 0) + obj.orig_amount;
+    total += obj.amount;
+    records.push(obj);
+  });
+  records.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { records, total, byCurrency };
+}
+
 // ── 月份總覽（for 結算頁）────────────────────────
 function getMonthSummary(e) {
   const year  = parseInt(e.parameter.year);
@@ -181,6 +262,7 @@ function getMonthSummary(e) {
   const sharedOlanTotal  = sumSheet(SHEETS.expense_shared,      'olan_amount');
   const familyOlanTotal  = sumSheet(SHEETS.expense_family,      'olan_amount');
   const installmentTotal = sumSheet(SHEETS.expense_installment, 'per_amount');
+  const projectTotal     = sumSheet(SHEETS.expense_project,     'amount');
 
   return {
     income: { total: totalIncome, salary: salaryIncome, cash: cashIncome, prepay: prepayIncome },
@@ -189,7 +271,8 @@ function getMonthSummary(e) {
       personal:    personalTotal,
       shared_olan: sharedOlanTotal,
       family_olan: familyOlanTotal,
-      installment: installmentTotal
+      installment: installmentTotal,
+      project:     projectTotal
     },
     available: totalIncome - totalBills
   };
