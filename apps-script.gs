@@ -125,27 +125,58 @@ function getRecords(e) {
 }
 
 // ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
-// 優先用 Yahoo 股市即期價（跟使用者在 Yahoo 看到的一致、盤中即時）；抓不到才退回 open.er-api.com。
-// 註：台銀牌告已加機器人驗證，UrlFetchApp（含 Google 伺服器）皆被擋回挑戰頁，無法自動取得。
-// 回傳的 source 標示實際來源：'yahoo' / 'erapi'。此為參考匯率，前端可依信用卡帳單手動覆蓋。
+// 你付外幣是用「即期賣出」，故優先抓 Yahoo 外匯頁的銀行即期賣出牌告（韓元無即期→退回現金賣出）；
+// 抓不到再退回 Yahoo 市場即期價、最後 open.er-api.com 中間價。
+// 註：台銀官網 CSV 已加機器人驗證，UrlFetchApp 直抓被擋，改由 Yahoo 轉載的銀行牌告取得即期賣出。
+// 回傳 source 標示來源：'yahoo-sell'(銀行即期賣出) / 'yahoo-mkt'(市場價) / 'erapi'(中間價)。可手動覆蓋。
 function getRate(e) {
   const currency = String(e.parameter.currency || '').toUpperCase();
   if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD', source: 'fixed' };
 
-  // 1) Yahoo 股市：{幣別}TWD=X
-  const y = fetchYahooRate(currency);
-  if (y) return { rate: y, currency, source: 'yahoo' };
+  const sell = fetchYahooSellRate(currency);
+  if (sell) return { rate: sell, currency, source: 'yahoo-sell' };
 
-  // 2) 備援：open.er-api.com
+  const mkt = fetchYahooMarketRate(currency);
+  if (mkt) return { rate: mkt, currency, source: 'yahoo-mkt' };
+
   const fb = fetchErApiRate(currency);
   if (fb) return { rate: fb, currency, source: 'erapi' };
 
   return { rate: null, currency };
 }
 
-// Yahoo Finance chart API：回傳 meta.regularMarketPrice 即 1 單位外幣的台幣價。
-// 需帶瀏覽器 User-Agent，否則 Yahoo 可能擋掉。
-function fetchYahooRate(currency) {
+// Yahoo 外匯頁內嵌各銀行牌告 JSON，取即期賣出(spotSellRate)；無即期(如韓元)退回現金賣出(cashSellRate)。
+// 優先台灣銀行，否則任一有牌價的銀行。需帶瀏覽器 User-Agent。
+function fetchYahooSellRate(currency) {
+  try {
+    const res = UrlFetchApp.fetch('https://tw.stock.yahoo.com/currency-converter', {
+      muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (res.getResponseCode() !== 200) return null;
+    const html = res.getContentText();
+    const re = new RegExp('\\{"unitCurrency":"' + currency + '"[^}]*\\}', 'g');
+    const entries = [];
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      try { entries.push(JSON.parse(m[0])); } catch (err) {}
+    }
+    if (!entries.length) return null;
+    function sellOf(en) {
+      let s = parseFloat(en.spotSellRate);
+      if (!isNaN(s) && s > 0) return s;            // 即期賣出優先
+      let c = parseFloat(en.cashSellRate);
+      return (!isNaN(c) && c > 0) ? c : null;      // 無即期則現金賣出
+    }
+    const bot = entries.filter(en => en.bankName === '台灣銀行' && sellOf(en));
+    const pick = bot.length ? bot[0] : entries.filter(en => sellOf(en))[0];
+    return pick ? sellOf(pick) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Yahoo Finance chart API：市場即期中間價（meta.regularMarketPrice）。需帶瀏覽器 User-Agent。
+function fetchYahooMarketRate(currency) {
   try {
     const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(currency) + 'TWD=X?interval=1d&range=1d';
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
