@@ -124,30 +124,22 @@ function getRecords(e) {
   return { records };
 }
 
-// ── 台銀當天牌告匯率（即期賣出，缺即期則退回現金賣出）──
+// ── 當天匯率（回傳 1 單位外幣 = 幾元台幣）────────────
+// 來源：open.er-api.com（免金鑰、每日更新、含台幣，市場中間價）。
+// 原本想用台銀牌告，但台銀 CSV 已加機器人驗證(JS Challenge)，UrlFetchApp/一般 client 皆抓不到，
+// 故改用此穩定來源。此為參考匯率，前端可依信用卡帳單實際入帳匯率手動覆蓋。
 function getRate(e) {
   const currency = String(e.parameter.currency || '').toUpperCase();
   if (!currency || currency === 'TWD') return { rate: 1, currency: 'TWD' };
 
-  // 台銀 CSV 欄位：幣別,匯率,現金,即期,遠期10~180天(共7欄)  → 本行買入區塊(index 0~10)
-  //              　匯率,現金,即期,遠期10~180天(共7欄)      → 本行賣出區塊(index 11~20)
-  // 實測（2026-07-29 取自 Wayback Machine 歷史快照，因原站對 curl 有機器人驗證擋掉直連）：
-  // USD,本行買入,31.08500,31.43500,...,本行賣出,31.75500,31.53500,...
-  // index 12 = 現金賣出(31.755)，index 13 = 即期賣出(31.535)
-  // 部分幣別（例如 KRW 韓元）台銀不提供即期匯率、即期欄位為 0，
-  // 此時退回用現金賣出欄位（index 12）當作近似匯率，兩者皆無效才回傳 null。
-  const SPOT_SELL_IDX = 13; // 即期賣出欄位索引（依實測確認，非文件假設的 index 5）
-  const CASH_SELL_IDX = 12; // 現金賣出欄位索引（即期缺值時的備援，如 KRW）
   try {
-    const csv = UrlFetchApp.fetch('https://rate.bot.com.tw/xrt/flcsv/0/day', {
+    const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(currency), {
       muteHttpExceptions: true
-    }).getContentText();
-    const line = csv.split('\n').find(l => l.split(',')[0].trim().toUpperCase() === currency);
-    if (!line) return { rate: null, currency };
-    const cols = line.split(',');
-    let rate = parseFloat(cols[SPOT_SELL_IDX]);
-    if (isNaN(rate) || rate <= 0) rate = parseFloat(cols[CASH_SELL_IDX]);
-    if (isNaN(rate) || rate <= 0) return { rate: null, currency };
+    });
+    if (res.getResponseCode() !== 200) return { rate: null, currency };
+    const data = JSON.parse(res.getContentText());
+    const rate = (data && data.result === 'success' && data.rates) ? Number(data.rates.TWD) : null;
+    if (!rate || rate <= 0) return { rate: null, currency };
     return { rate, currency };
   } catch (err) {
     return { rate: null, currency };
