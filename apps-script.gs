@@ -136,13 +136,14 @@ function getRate(e) {
     const res = UrlFetchApp.fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(currency), {
       muteHttpExceptions: true
     });
-    if (res.getResponseCode() !== 200) return { rate: null, currency };
-    const data = JSON.parse(res.getContentText());
+    const code = res.getResponseCode();
+    const body = res.getContentText();
+    const data = JSON.parse(body);
     const rate = (data && data.result === 'success' && data.rates) ? Number(data.rates.TWD) : null;
-    if (!rate || rate <= 0) return { rate: null, currency };
+    if (!rate || rate <= 0) return { rate: null, currency, _debug: { code: code, snippet: String(body).slice(0, 120) } };
     return { rate, currency };
   } catch (err) {
-    return { rate: null, currency };
+    return { rate: null, currency, _debug: { error: String(err) } };
   }
 }
 
