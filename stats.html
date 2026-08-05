@@ -151,6 +151,17 @@
       </div>
     </div>
 
+    <div class="total-card">
+      <div class="total-item">
+        <div class="label">現金支出</div>
+        <div class="val expense" id="cashExpense">—</div>
+      </div>
+      <div class="total-item">
+        <div class="label">刷卡支出</div>
+        <div class="val expense" id="cardExpense">—</div>
+      </div>
+    </div>
+
     <div class="section-title">支出分類</div>
     <div id="catList"><div class="loading">載入中…</div></div>
   </div>
@@ -208,6 +219,8 @@
       syncMonthInput();
       document.getElementById('totalExpense').textContent = '—';
       document.getElementById('totalIncome').textContent = '—';
+      document.getElementById('cashExpense').textContent = '—';
+      document.getElementById('cardExpense').textContent = '—';
       document.getElementById('catList').innerHTML = '<div class="loading">載入中…</div>';
 
       try {
@@ -218,6 +231,7 @@
         const CATEGORIZED_SHEETS = ['expense_personal', 'expense_shared', 'expense_family'];
 
         let totalExpense = 0, totalIncome = 0;
+        let cashExpense = 0, cardExpense = 0;   // 現金 vs 刷卡（全部支出類型，加總等於支出總計）
         const catMap = {};
 
         records.forEach(r => {
@@ -227,6 +241,9 @@
             return;
           }
           totalExpense += amt;
+          // payment 含「刷」歸刷卡，其餘（現金/空白/舊資料）歸現金
+          if (String(r.payment).includes('刷')) cardExpense += amt;
+          else cashExpense += amt;
           if (CATEGORIZED_SHEETS.includes(r.sheet)) {
             catMap[r.category] = (catMap[r.category] || 0) + amt;
           }
@@ -234,6 +251,8 @@
 
         document.getElementById('totalExpense').textContent = '$' + totalExpense.toLocaleString();
         document.getElementById('totalIncome').textContent = '$' + totalIncome.toLocaleString();
+        document.getElementById('cashExpense').textContent = '$' + cashExpense.toLocaleString();
+        document.getElementById('cardExpense').textContent = '$' + cardExpense.toLocaleString();
 
         const cats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
         const categorizedTotal = cats.reduce((s, [, amt]) => s + amt, 0);

@@ -395,6 +395,7 @@ function collectExpense(sheetKey, year, month, records) {
       category: sheetKey === 'expense_installment' ? (obj.name || '分期') : (obj.category || '其他'),
       note: obj.note || '',
       amount,
+      payment: obj.payment || '',   // 現金 / 刷卡（給統計頁分現金 vs 刷卡用；空白視為現金）
       date: fmtDate(d)
     });
   });
