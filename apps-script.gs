@@ -19,14 +19,15 @@ const SHEETS = {
 };
 
 // ── 各工作表欄位定義（新增欄位一律加在最後，避免打亂舊資料欄位順序）──
+// 每張表最後多一欄 client_id：前端每筆送出帶固定 id，後端寫入前先比對，存過就跳過（防重試重複）
 const HEADERS = {
-  income:              ['date', 'description', 'amount', 'type'],
-  expense_personal:    ['month', 'category', 'amount', 'payment', 'note', 'date'],
-  expense_shared:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
-  expense_family:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date'],
-  expense_installment: ['month', 'name', 'per_amount', 'total_amount', 'current_period', 'total_periods', 'payment', 'note', 'date'],
-  expense_project:     ['month', 'project', 'category', 'orig_amount', 'currency', 'rate', 'amount', 'payment', 'note', 'date'],
-  card_bills:          ['month', 'date', 'bank', 'amount', 'note']
+  income:              ['date', 'description', 'amount', 'type', 'client_id'],
+  expense_personal:    ['month', 'category', 'amount', 'payment', 'note', 'date', 'client_id'],
+  expense_shared:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date', 'client_id'],
+  expense_family:      ['month', 'category', 'amount', 'payment', 'olan_amount', 'wei_amount', 'note', 'date', 'client_id'],
+  expense_installment: ['month', 'name', 'per_amount', 'total_amount', 'current_period', 'total_periods', 'payment', 'note', 'date', 'client_id'],
+  expense_project:     ['month', 'project', 'category', 'orig_amount', 'currency', 'rate', 'amount', 'payment', 'note', 'date', 'client_id'],
+  card_bills:          ['month', 'date', 'bank', 'amount', 'note', 'client_id']
 };
 
 // 會出現在「最近記錄」時間軸與分類統計的支出類型（card_bills 屬於結算機制，不算個人消費分類）
@@ -67,11 +68,35 @@ function addRecord(data) {
   const sheetName = SHEETS[data.sheet];
   if (!sheetName) throw new Error('invalid sheet: ' + data.sheet);
 
-  const sheet = getOrCreateSheet(sheetName, HEADERS[data.sheet]);
-  const headers = HEADERS[data.sheet];
-  const row = headers.map(h => data[h] !== undefined ? data[h] : '');
-  sheet.appendRow(row);
-  return { ok: true };
+  // 加鎖：避免同一筆並發重試同時通過檢查、各寫一列
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getOrCreateSheet(sheetName, HEADERS[data.sheet]);
+    const headers = HEADERS[data.sheet];
+
+    // 防重複：帶了 client_id 就先掃該表 client_id 欄，已存在同 id 代表這筆前一次其實寫成功了 → 不再寫
+    if (data.client_id) {
+      const lastRow = sheet.getLastRow();
+      const lastCol = sheet.getLastColumn();
+      const sheetHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      const idCol = sheetHeaders.indexOf('client_id');
+      if (idCol !== -1 && lastRow > 1) {
+        const ids = sheet.getRange(2, idCol + 1, lastRow - 1, 1).getValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (ids[i][0] && String(ids[i][0]) === String(data.client_id)) {
+            return { ok: true, dedup: true };
+          }
+        }
+      }
+    }
+
+    const row = headers.map(h => data[h] !== undefined ? data[h] : '');
+    sheet.appendRow(row);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── 刪除記錄（按 rowIndex，1-based，包含標題列）────

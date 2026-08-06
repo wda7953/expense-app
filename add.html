@@ -294,6 +294,7 @@
     let currentType = 'expense_personal';
     let selectedCat = EXPENSE_CATS[0].name;
     let selectedPay = '現金';
+    let clientId = API.genClientId();   // 這一筆的唯一 id；存檔失敗重按沿用同 id → 後端去重，成功後才換新
 
     // 初始化日期
     const today = new Date();
@@ -481,12 +482,15 @@
         }
       }
 
+      payload.client_id = clientId;
+
       const btn = document.getElementById('saveBtn');
       btn.disabled = true; btn.textContent = '儲存中…';
 
       try {
         await API.apiPost('addRecord', payload);
         showToast('✅ 已儲存！');
+        clientId = API.genClientId();   // 這筆成功了，下一筆換新 id（真的要記兩筆一樣的也不會被誤併）
         setTimeout(() => {
           document.getElementById('amount').value = '';
           document.getElementById('note').value   = '';

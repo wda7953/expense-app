@@ -24,4 +24,10 @@ async function apiPost(action, data) {
   return res.json();
 }
 
-window.API = { apiGet, apiPost };
+// 產生唯一 client_id：同一筆送出用固定 id，重試時沿用，後端據此去重（重試安全）
+function genClientId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+
+window.API = { apiGet, apiPost, genClientId };

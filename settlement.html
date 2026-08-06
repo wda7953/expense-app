@@ -267,6 +267,8 @@
       setTimeout(() => t.classList.remove('show'), 2000);
     }
 
+    let billClientId = null;   // 這筆卡費的唯一 id；失敗重按沿用同 id → 後端去重，成功後歸零換新
+
     async function addBill() {
       const date   = document.getElementById('bill_date').value;
       const bank   = document.getElementById('bill_bank').value;
@@ -274,13 +276,23 @@
       const note   = document.getElementById('bill_note').value.trim();
       if (!date || !amount) { showToast('請填日期和金額'); return; }
 
+      if (!billClientId) billClientId = API.genClientId();
+      const btn = document.getElementById('addBillBtn');
+      btn.disabled = true; btn.textContent = '新增中…';
+
       const ym = `${currentYear}.${String(currentMonth).padStart(2,'0')}`;
-      await API.apiPost('addRecord', {
-        sheet: 'card_bills',
-        month: ym, date, bank, amount, note
-      });
-      showToast('✅ 已新增');
-      loadData();
+      try {
+        await API.apiPost('addRecord', {
+          sheet: 'card_bills',
+          month: ym, date, bank, amount, note, client_id: billClientId
+        });
+        billClientId = null;   // 成功，下一筆換新 id
+        showToast('✅ 已新增');
+        loadData();
+      } catch (e) {
+        showToast('❌ 新增失敗');
+        btn.disabled = false; btn.textContent = '新增';
+      }
     }
 
     async function loadData() {
@@ -377,7 +389,7 @@
                 <label>備註（可略）</label>
                 <input type="text" id="bill_note" placeholder="">
               </div>
-              <button class="add-bill-btn" onclick="addBill()">新增</button>
+              <button class="add-bill-btn" id="addBillBtn" onclick="addBill()">新增</button>
             </div>
           </div>
         </div>
