@@ -135,9 +135,8 @@ function getRecords(e) {
         const d = new Date(r.date);
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       } else {
-        // month 欄格式：2026.07
-        const [y, m] = String(r.month).split('.').map(Number);
-        return y === year && m === month;
+        // 優先用 date 欄比月份，month 欄僅作備援（見 inYearMonth_）
+        return inYearMonth_(r.date, r.month, year, month);
       }
     })
     .map(r => {
@@ -285,7 +284,7 @@ function getProjectRecords(e) {
 function getMonthSummary(e) {
   const year  = parseInt(e.parameter.year);
   const month = parseInt(e.parameter.month);
-  const ym    = `${year}.${String(month).padStart(2, '0')}`;
+  const ym    = `${year}.${String(month).padStart(2, '0')}`; // 卡費帳單仍用「所屬月」文字比對（帳單月未必等於 date 月）
 
   function sumSheet(name, amtField) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
@@ -293,10 +292,13 @@ function getMonthSummary(e) {
     const rows = sheet.getDataRange().getValues();
     const hdr = rows[0];
     const monthIdx = hdr.indexOf('month');
+    const dateIdx  = hdr.indexOf('date');
     const amtIdx   = hdr.indexOf(amtField);
-    if (monthIdx < 0 || amtIdx < 0) return 0;
+    if (amtIdx < 0) return 0;
     return rows.slice(1).reduce((sum, row) => {
-      if (String(row[monthIdx]) === ym) sum += Number(row[amtIdx]) || 0;
+      const dv = dateIdx  >= 0 ? row[dateIdx]  : '';
+      const mv = monthIdx >= 0 ? row[monthIdx] : '';
+      if (inYearMonth_(dv, mv, year, month)) sum += Number(row[amtIdx]) || 0;
       return sum;
     }, 0);
   }
@@ -450,6 +452,18 @@ function getOrCreateSheet(name, headers) {
 
 function toDateObj(v) {
   return v instanceof Date ? v : new Date(v);
+}
+
+// 判斷某列是否落在指定年/月。優先用 date 欄（最可靠，因 month 本就由 date 推導）；
+// date 缺漏才退回 month 欄字串比對。這樣不管 month 被 Sheets 存成日期或數字
+// （例：2026.10 會退化成數字 2026.1）都不會漏算。
+function inYearMonth_(dateVal, monthVal, year, month) {
+  if (dateVal !== '' && dateVal != null) {
+    const d = toDateObj(dateVal);
+    if (!isNaN(d)) return d.getFullYear() === year && d.getMonth() + 1 === month;
+  }
+  const parts = String(monthVal).replace('-', '.').split('.');
+  return Number(parts[0]) === year && Number(parts[1]) === month;
 }
 
 function fmtDate(d) {
