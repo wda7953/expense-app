@@ -208,6 +208,7 @@
     const initYM = savedYM ? savedYM.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1];
     let currentYear = initYM[0];
     let currentMonth = initYM[1];
+    let loadSeq = 0;   // 每次載入遞增；背景資料回來時若已切到別月就丟棄，避免閃到上個月
 
     function saveYM() {
       localStorage.setItem(YM_KEY, `${currentYear}-${String(currentMonth).padStart(2, '0')}`);
@@ -287,9 +288,10 @@
 
     async function loadData() {
       syncMonthInput();
+      const seq = ++loadSeq;
       const key = `records_${currentYear}-${currentMonth}`;
 
-      // 先秀上次快取（瞬間顯示），沒有才顯示載入中
+      // 先秀這個月的快取（瞬間顯示），沒有才顯示載入中
       const cached = API.cacheGet(key);
       if (cached) {
         renderRecords(cached.records || []);
@@ -304,9 +306,10 @@
       try {
         const data = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
         API.cacheSet(key, data);
+        if (seq !== loadSeq) return;   // 已切到別的月份，這份是舊請求 → 丟棄不畫
         renderRecords(data.records || []);
       } catch (e) {
-        if (!cached) {
+        if (seq === loadSeq && !cached) {
           document.getElementById('recordsList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗，請確認網路</div>';
         }
         // 有快取就靜靜留著舊資料，不打斷

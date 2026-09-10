@@ -193,6 +193,7 @@
     let currentMonth = initYM[1];
     let showAddBill  = false;
     let currentRecords = [];
+    let loadSeq = 0;   // 每次載入遞增；背景資料回來時若已切到別月就丟棄，避免閃到上個月
 
     function saveYM() {
       localStorage.setItem(YM_KEY, `${currentYear}-${String(currentMonth).padStart(2, '0')}`);
@@ -297,10 +298,11 @@
 
     async function loadData() {
       syncMonthInput();
+      const seq = ++loadSeq;
       const sKey = `summary_${currentYear}-${currentMonth}`;
       const rKey = `records_${currentYear}-${currentMonth}`;
 
-      // 先秀上次快取（瞬間顯示），兩份都有才畫，否則顯示載入中
+      // 先秀這個月的快取（瞬間顯示），沒有才顯示載入中
       const cachedS = API.cacheGet(sKey);
       const cachedR = API.cacheGet(rKey);
       if (cachedS) {
@@ -317,9 +319,10 @@
         ]);
         API.cacheSet(sKey, d);
         API.cacheSet(rKey, r);
+        if (seq !== loadSeq) return;   // 使用者已切到別的月份，這份是舊請求 → 丟棄不畫
         renderSettlement(d, r.records || []);
       } catch (e) {
-        if (!cachedS) document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
+        if (seq === loadSeq && !cachedS) document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
       }
     }
 
