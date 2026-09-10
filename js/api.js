@@ -30,4 +30,19 @@ function genClientId() {
   return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2);
 }
 
-window.API = { apiGet, apiPost, genClientId };
+// ── 讀取快取（stale-while-revalidate）──────────────────
+// GAS 每次呼叫都要冷啟動 1~3 秒，開頁乾等很慢。
+// 讀取頁改成：先秀上次成功抓到的資料（瞬間顯示），背景再抓最新覆蓋。
+// 只快取「查詢結果」，不涉及寫入，資料頂多晚幾秒更新，安全。
+const CACHE_PREFIX = 'expense_cache_';
+function cacheGet(key) {
+  try {
+    const v = localStorage.getItem(CACHE_PREFIX + key);
+    return v ? JSON.parse(v) : null;
+  } catch (e) { return null; }
+}
+function cacheSet(key, data) {
+  try { localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data)); } catch (e) {}
+}
+
+window.API = { apiGet, apiPost, genClientId, cacheGet, cacheSet };

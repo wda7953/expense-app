@@ -297,18 +297,34 @@
 
     async function loadData() {
       syncMonthInput();
-      document.getElementById('content').innerHTML = '<div class="loading">載入中…</div>';
+      const sKey = `summary_${currentYear}-${currentMonth}`;
+      const rKey = `records_${currentYear}-${currentMonth}`;
 
-      let d;
-      try {
-        d = await API.apiGet('getMonthSummary', { year: currentYear, month: currentMonth });
-        const r = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
-        currentRecords = r.records || [];
-      } catch (e) {
-        document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
-        return;
+      // 先秀上次快取（瞬間顯示），兩份都有才畫，否則顯示載入中
+      const cachedS = API.cacheGet(sKey);
+      const cachedR = API.cacheGet(rKey);
+      if (cachedS) {
+        renderSettlement(cachedS, (cachedR && cachedR.records) || []);
+      } else {
+        document.getElementById('content').innerHTML = '<div class="loading">載入中…</div>';
       }
 
+      // 背景抓最新：兩個請求「並行」打，不再一個等一個（省一次冷啟動的等待）
+      try {
+        const [d, r] = await Promise.all([
+          API.apiGet('getMonthSummary', { year: currentYear, month: currentMonth }),
+          API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth })
+        ]);
+        API.cacheSet(sKey, d);
+        API.cacheSet(rKey, r);
+        renderSettlement(d, r.records || []);
+      } catch (e) {
+        if (!cachedS) document.getElementById('content').innerHTML = '<div class="loading">⚠️ 載入失敗</div>';
+      }
+    }
+
+    function renderSettlement(d, records) {
+      currentRecords = records;
       const inc = d.income || {};
       const exp = d.expenses || {};
       const available = d.available ?? 0;

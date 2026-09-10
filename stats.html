@@ -215,18 +215,7 @@
       loadData();
     };
 
-    async function loadData() {
-      syncMonthInput();
-      document.getElementById('totalExpense').textContent = '—';
-      document.getElementById('totalIncome').textContent = '—';
-      document.getElementById('cashExpense').textContent = '—';
-      document.getElementById('cardExpense').textContent = '—';
-      document.getElementById('catList').innerHTML = '<div class="loading">載入中…</div>';
-
-      try {
-        const data = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
-        const records = data.records || [];
-
+    function renderStats(records) {
         // 分類統計只算個人支出＋共同/家庭支出（綸的份額），分期款項不算類別（用途各異，另外看月結算）
         const CATEGORIZED_SHEETS = ['expense_personal', 'expense_shared', 'expense_family'];
 
@@ -280,8 +269,32 @@
             <div class="cat-pct">${pct}%</div>
           </div>`;
         }).join('');
+    }
+
+    async function loadData() {
+      syncMonthInput();
+      const key = `records_${currentYear}-${currentMonth}`;
+
+      // 先秀上次快取（與總覽共用同一份 records），沒有才顯示載入中
+      const cached = API.cacheGet(key);
+      if (cached) {
+        renderStats(cached.records || []);
+      } else {
+        document.getElementById('totalExpense').textContent = '—';
+        document.getElementById('totalIncome').textContent = '—';
+        document.getElementById('cashExpense').textContent = '—';
+        document.getElementById('cardExpense').textContent = '—';
+        document.getElementById('catList').innerHTML = '<div class="loading">載入中…</div>';
+      }
+
+      try {
+        const data = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
+        API.cacheSet(key, data);
+        renderStats(data.records || []);
       } catch (e) {
-        document.getElementById('catList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗</div>';
+        if (!cached) {
+          document.getElementById('catList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗</div>';
+        }
       }
     }
 

@@ -246,58 +246,70 @@
       loadData();
     };
 
-    async function loadData() {
-      syncMonthInput();
-      document.getElementById('totalIncome').textContent = '—';
-      document.getElementById('totalExpense').textContent = '—';
-      document.getElementById('balance').textContent = '—';
-      document.getElementById('recordsList').innerHTML = '<div class="loading">載入中…</div>';
+    function renderRecords(records) {
+      let income = 0, expense = 0;
+      records.forEach(r => {
+        if (r.type === 'income') income += Number(r.amount);
+        else expense += Number(r.amount);
+      });
 
-      try {
-        const data = await API.apiGet('getMonthRecords', {
-          year: currentYear,
-          month: currentMonth
-        });
+      document.getElementById('totalIncome').textContent = formatMoney(income);
+      document.getElementById('totalExpense').textContent = formatMoney(expense);
+      const bal = income - expense;
+      document.getElementById('balance').textContent = (bal >= 0 ? '+' : '-') + '$' + Math.abs(bal).toLocaleString();
 
-        const records = data.records || [];
-        let income = 0, expense = 0;
-        records.forEach(r => {
-          if (r.type === 'income') income += Number(r.amount);
-          else expense += Number(r.amount);
-        });
+      const list = document.getElementById('recordsList');
+      if (records.length === 0) {
+        list.innerHTML = '<div class="empty-state"><div class="emoji">📭</div>這個月還沒有記錄</div>';
+        return;
+      }
 
-        document.getElementById('totalIncome').textContent = formatMoney(income);
-        document.getElementById('totalExpense').textContent = formatMoney(expense);
-        const bal = income - expense;
-        document.getElementById('balance').textContent = (bal >= 0 ? '+' : '-') + '$' + Math.abs(bal).toLocaleString();
-
-        const list = document.getElementById('recordsList');
-        if (records.length === 0) {
-          list.innerHTML = '<div class="empty-state"><div class="emoji">📭</div>這個月還沒有記錄</div>';
-          return;
-        }
-
-        // 最新的排最前
-        const sorted = [...records].sort((a, b) => new Date(b.date) - new Date(a.date));
-        list.innerHTML = sorted.map(r => `
-          <div class="record-item">
-            <div class="record-left">
-              <div class="record-icon ${r.type}">
-                ${CATEGORY_ICONS[r.category] || '📌'}
-              </div>
-              <div class="record-info">
-                <div class="category">${r.category}</div>
-                ${r.note ? `<div class="note">${r.note}</div>` : ''}
-              </div>
+      // 最新的排最前
+      const sorted = [...records].sort((a, b) => new Date(b.date) - new Date(a.date));
+      list.innerHTML = sorted.map(r => `
+        <div class="record-item">
+          <div class="record-left">
+            <div class="record-icon ${r.type}">
+              ${CATEGORY_ICONS[r.category] || '📌'}
             </div>
-            <div class="record-right">
-              <div class="amount ${r.type}">${r.type === 'expense' ? '-' : '+'}${formatMoney(r.amount)}</div>
-              <div class="date">${formatDate(r.date)}</div>
+            <div class="record-info">
+              <div class="category">${r.category}</div>
+              ${r.note ? `<div class="note">${r.note}</div>` : ''}
             </div>
           </div>
-        `).join('');
+          <div class="record-right">
+            <div class="amount ${r.type}">${r.type === 'expense' ? '-' : '+'}${formatMoney(r.amount)}</div>
+            <div class="date">${formatDate(r.date)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadData() {
+      syncMonthInput();
+      const key = `records_${currentYear}-${currentMonth}`;
+
+      // 先秀上次快取（瞬間顯示），沒有才顯示載入中
+      const cached = API.cacheGet(key);
+      if (cached) {
+        renderRecords(cached.records || []);
+      } else {
+        document.getElementById('totalIncome').textContent = '—';
+        document.getElementById('totalExpense').textContent = '—';
+        document.getElementById('balance').textContent = '—';
+        document.getElementById('recordsList').innerHTML = '<div class="loading">載入中…</div>';
+      }
+
+      // 背景抓最新，成功就更新快取並重繪
+      try {
+        const data = await API.apiGet('getMonthRecords', { year: currentYear, month: currentMonth });
+        API.cacheSet(key, data);
+        renderRecords(data.records || []);
       } catch (e) {
-        document.getElementById('recordsList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗，請確認網路</div>';
+        if (!cached) {
+          document.getElementById('recordsList').innerHTML = '<div class="empty-state"><div class="emoji">⚠️</div>載入失敗，請確認網路</div>';
+        }
+        // 有快取就靜靜留著舊資料，不打斷
       }
     }
 
