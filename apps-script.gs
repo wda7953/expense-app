@@ -416,15 +416,22 @@ function collectExpense(sheetKey, year, month, records) {
     else if (sheetKey === 'expense_shared' || sheetKey === 'expense_family') amount = Number(obj.olan_amount) || 0;
     else amount = Number(obj.amount) || 0;
 
-    records.push({
+    const rec = {
       type: 'expense',
       sheet: sheetKey,
       category: sheetKey === 'expense_installment' ? (obj.name || '分期') : (obj.category || '其他'),
       note: obj.note || '',
-      amount,
+      amount,   // 共同/家庭＝綸的份額（統計口徑不變）
       payment: obj.payment || '',   // 現金 / 刷卡（給統計頁分現金 vs 刷卡用；空白視為現金）
       date: fmtDate(d)
-    });
+    };
+    // 共同/家庭支出：明細要同時看到「全額／綸／瑋」，所以多帶這三個欄位
+    if (sheetKey === 'expense_shared' || sheetKey === 'expense_family') {
+      rec.fullAmount = Number(obj.amount) || 0;      // 整筆全額
+      rec.olanAmount = Number(obj.olan_amount) || 0; // 綸出（＝amount）
+      rec.weiAmount  = Number(obj.wei_amount) || 0;  // 瑋出
+    }
+    records.push(rec);
   });
 }
 

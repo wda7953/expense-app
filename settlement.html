@@ -121,7 +121,8 @@
     }
     .detail-name { font-weight: 600; color: #3A2E24; }
     .detail-note { color: #aaa; font-size: 11px; margin-top: 1px; }
-    .detail-amount { font-weight: 700; }
+    .detail-amount { font-weight: 700; text-align: right; }
+    .detail-split { color: #999; font-size: 10px; margin-top: 1px; text-align: right; }
     .detail-date { color: #bbb; font-size: 10px; margin-top: 1px; text-align: right; }
     .detail-empty { text-align: center; color: #ccc; font-size: 12px; padding: 8px; }
     .hidden { display: none !important; }
@@ -219,17 +220,25 @@
         }
         records.sort((a, b) => new Date(b.date) - new Date(a.date));
         el.innerHTML = records.length
-          ? records.map(r => `
+          ? records.map(r => {
+              // 共同/家庭支出：全額為主，下方標「綸 X 瑋 Y」；其他類型維持單一金額
+              const isSplit = (r.sheet === 'expense_shared' || r.sheet === 'expense_family') && r.fullAmount != null;
+              const amountBlock = isSplit
+                ? `<div class="detail-amount">全額 ${fmt(r.fullAmount)}</div>
+                   <div class="detail-split">綸 ${fmt(r.olanAmount)} · 瑋 ${fmt(r.weiAmount)}</div>`
+                : `<div class="detail-amount">${fmt(r.amount)}</div>`;
+              return `
               <div class="detail-row">
                 <div>
                   <div class="detail-name">${r.category}</div>
                   ${r.note ? `<div class="detail-note">${r.note}</div>` : ''}
                 </div>
                 <div>
-                  <div class="detail-amount">${fmt(r.amount)}</div>
+                  ${amountBlock}
                   <div class="detail-date">${r.date}</div>
                 </div>
-              </div>`).join('')
+              </div>`;
+            }).join('')
           : '<div class="detail-empty">沒有明細（可能是舊資料沒有記錄日期）</div>';
       }
       el.classList.toggle('hidden', !opening);
