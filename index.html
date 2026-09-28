@@ -155,6 +155,19 @@
     }
 
     .loading { text-align: center; padding: 30px; color: #bbb; font-size: 14px; }
+
+    /* 水電費提醒橫幅 */
+    .bill-reminder {
+      margin: 12px 16px 0; padding: 12px 14px; border-radius: 12px;
+      font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    }
+    .bill-reminder.todo { background: #FFF3E0; color: #C62828; border: 1px solid #FFCC80; }
+    .bill-reminder.done { background: #E8F5E9; color: #2E7D32; }
+    .bill-reminder a {
+      margin-left: auto; color: #C62828; font-size: 13px; font-weight: 700;
+      text-decoration: none; background: white; padding: 6px 12px; border-radius: 8px;
+      white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -166,6 +179,9 @@
       <button id="nextMonth">›</button>
     </div>
   </div>
+
+  <!-- 雙數月水費／單數月電費提醒（只在檢視當月且尚未記帳時顯示紅字） -->
+  <div id="billReminder" class="bill-reminder" style="display:none"></div>
 
   <div class="summary">
     <div class="card income">
@@ -199,7 +215,7 @@
   <script>
     const CATEGORY_ICONS = {
       '飲食': '🍽️', '交通': '🚗', '購物': '🛍️', '旅遊': '✈️',
-      '運動/活動': '🏃', '醫療': '💊', '器材': '🏋️', '其他': '📌',
+      '運動/活動': '🏃', '醫療': '💊', '器材': '🏋️', '電費': '💡', '水費': '🚰', '其他': '📌',
       '現金收入': '💰', '預收款': '📥', '武士薪水': '🥋'
     };
 
@@ -247,7 +263,30 @@
       loadData();
     };
 
+    // 水電費提醒：單數月電費、雙數月水費；只在檢視「當月」且該類別本月尚未記帳時顯示紅字
+    function renderBillReminder(records) {
+      const el = document.getElementById('billReminder');
+      const now = new Date();
+      const isCurrentMonth = (currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1);
+      if (!isCurrentMonth) { el.style.display = 'none'; return; }
+
+      const isOdd = (currentMonth % 2 === 1);
+      const target = isOdd ? '電費' : '水費';
+      const icon = isOdd ? '💡' : '🚰';
+      const done = records.some(r => r.type === 'expense' && String(r.category || '').includes(target));
+
+      el.style.display = 'flex';
+      if (done) {
+        el.className = 'bill-reminder done';
+        el.innerHTML = `✅ 本月${target}已記帳`;
+      } else {
+        el.className = 'bill-reminder todo';
+        el.innerHTML = `${icon} 本月要繳${target}（${isOdd ? '單' : '雙'}數月），還沒記帳<a href="add.html">去記帳</a>`;
+      }
+    }
+
     function renderRecords(records) {
+      renderBillReminder(records);
       let income = 0, expense = 0;
       records.forEach(r => {
         if (r.type === 'income') income += Number(r.amount);
