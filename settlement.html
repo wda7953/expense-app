@@ -433,12 +433,12 @@
               <div class="val">${fmt(exp.personal || 0)}</div>
             </div>
             <div class="exp-card" onclick="toggleDetail('exp-expense_shared')">
-              <div class="label">共同支出（綸） <span class="chev" id="chev-exp-expense_shared">▸</span></div>
-              <div class="val">${fmt(exp.shared_olan || 0)}</div>
+              <div class="label">共同支出 <span class="chev" id="chev-exp-expense_shared">▸</span></div>
+              <div class="val">${fmt(exp.shared_full != null ? exp.shared_full : (exp.shared_olan || 0))}</div>
             </div>
             <div class="exp-card" onclick="toggleDetail('exp-expense_family')">
-              <div class="label">家庭支出（綸） <span class="chev" id="chev-exp-expense_family">▸</span></div>
-              <div class="val">${fmt(exp.family_olan || 0)}</div>
+              <div class="label">家庭支出 <span class="chev" id="chev-exp-expense_family">▸</span></div>
+              <div class="val">${fmt(exp.family_full != null ? exp.family_full : (exp.family_olan || 0))}</div>
             </div>
             <div class="exp-card" onclick="toggleDetail('exp-expense_installment')">
               <div class="label">分期款項 <span class="chev" id="chev-exp-expense_installment">▸</span></div>

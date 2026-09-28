@@ -344,6 +344,8 @@ function getMonthSummary(e) {
   const personalTotal    = sumSheet(SHEETS.expense_personal,    'amount');
   const sharedOlanTotal  = sumSheet(SHEETS.expense_shared,      'olan_amount');
   const familyOlanTotal  = sumSheet(SHEETS.expense_family,      'olan_amount');
+  const sharedFullTotal  = sumSheet(SHEETS.expense_shared,      'amount');       // 共同支出全額
+  const familyFullTotal  = sumSheet(SHEETS.expense_family,      'amount');       // 家庭支出全額
   const installmentTotal = sumSheet(SHEETS.expense_installment, 'per_amount');
   const projectTotal     = sumSheet(SHEETS.expense_project,     'amount');
 
@@ -352,8 +354,10 @@ function getMonthSummary(e) {
     bills:  { total: totalBills, items: bills },
     expenses: {
       personal:    personalTotal,
-      shared_olan: sharedOlanTotal,
-      family_olan: familyOlanTotal,
+      shared_olan: sharedOlanTotal,   // 綸份額（保留備用）
+      family_olan: familyOlanTotal,   // 綸份額（保留備用）
+      shared_full: sharedFullTotal,   // 全額（小結卡顯示用）
+      family_full: familyFullTotal,   // 全額（小結卡顯示用）
       installment: installmentTotal,
       project:     projectTotal
     },
