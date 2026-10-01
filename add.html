@@ -228,8 +228,11 @@
     <div class="hidden" id="projectRows">
       <div class="row">
         <label>專案</label>
-        <input type="text" id="proj_name" list="projListData" placeholder="例：202610韓國" autocomplete="off">
-        <datalist id="projListData"></datalist>
+        <!-- 已建專案用下拉選（iPhone 點一下即展開）；選「＋ 新建專案」才出現打字框 -->
+        <select id="proj_select">
+          <option value="__new__">＋ 新建專案…</option>
+        </select>
+        <input type="text" id="proj_name" class="hidden" placeholder="例：202610韓國" autocomplete="off" style="margin-top:8px;">
       </div>
       <div class="two-col">
         <div>
@@ -356,27 +359,42 @@
       renderCats();
     }
 
-    // ── 專案：載入已有專案清單填 datalist + 記住各專案上次幣別 ──
+    // ── 專案：載入已有專案清單填下拉選單 + 記住各專案上次幣別 ──
     let projectLastCurrency = {}; // { '202610韓國': 'USD' }
     async function loadProjects() {
       try {
         const data = await API.apiGet('getProjects');
         const list = data.projects || [];
-        document.getElementById('projListData').innerHTML =
-          list.map(p => `<option value="${p.project}">`).join('');
+        // 下拉：已建專案 + 最後一個「＋ 新建專案」選項
+        const sel = document.getElementById('proj_select');
+        sel.innerHTML =
+          list.map(p => `<option value="${p.project}">${p.project}</option>`).join('')
+          + '<option value="__new__">＋ 新建專案…</option>';
         projectLastCurrency = {};
         list.forEach(p => { projectLastCurrency[p.project] = p.lastCurrency || 'TWD'; });
+        // 預設：有舊專案就選第一個，沒有就直接進「新建」模式
+        onProjSelectChange();
       } catch (e) { /* 抓不到清單不影響記帳 */ }
     }
 
-    // 專案名改變 → 若該專案有上次幣別，帶入
-    document.getElementById('proj_name').addEventListener('change', () => {
-      const name = document.getElementById('proj_name').value.trim();
-      if (projectLastCurrency[name]) {
-        document.getElementById('proj_currency').value = projectLastCurrency[name];
-        onCurrencyChange();
+    // 下拉改變 → 決定用舊專案還是打字新建，並同步 proj_name（送單一律讀 proj_name）
+    function onProjSelectChange() {
+      const sel  = document.getElementById('proj_select');
+      const input = document.getElementById('proj_name');
+      if (sel.value === '__new__') {
+        input.classList.remove('hidden');   // 顯示打字框
+        input.value = '';
+        input.focus();
+      } else {
+        input.classList.add('hidden');       // 選舊專案，藏打字框
+        input.value = sel.value;
+        if (projectLastCurrency[sel.value]) {
+          document.getElementById('proj_currency').value = projectLastCurrency[sel.value];
+          onCurrencyChange();
+        }
       }
-    });
+    }
+    document.getElementById('proj_select').addEventListener('change', onProjSelectChange);
 
     // 幣別改變 → TWD 鎖匯率為 1；外幣抓當天牌告
     async function onCurrencyChange() {
