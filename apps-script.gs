@@ -93,6 +93,14 @@ function addRecord(data) {
 
     const row = headers.map(h => data[h] !== undefined ? data[h] : '');
     sheet.appendRow(row);
+
+    // month 欄（如 "2026.10"）會被 Sheets 當數字、把尾數 0 吃掉存成 2026.1 → 強制存成文字，月份比對才正確
+    const monthIdx = headers.indexOf('month');
+    if (monthIdx >= 0 && data.month !== undefined && data.month !== '') {
+      const newRow = sheet.getLastRow();
+      sheet.getRange(newRow, monthIdx + 1).setNumberFormat('@').setValue(String(data.month));
+    }
+
     return { ok: true };
   } finally {
     lock.releaseLock();
